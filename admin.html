@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم المسؤول - واتساب بوت</title>
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+        }
+
+        .data-table th, .data-table td {
+            padding: 12px;
+            text-align: right;
+            border-bottom: 1px solid #eee;
+        }
+
+        .data-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .data-table tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .status-active {
+            color: var(--success-color);
+            font-weight: bold;
+        }
+
+        .status-inactive {
+            color: var(--error-color);
+            font-weight: bold;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .tab-container {
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            background-color: #f8f9fa;
+            border: none;
+            padding: 10px 20px;
+            margin-right: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .tab-button.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .success {
+            background-color: rgba(37, 211, 102, 0.1);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .error {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--error-color);
+            border: 1px solid var(--error-color);
+        }
+
+        .action-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 5px;
+        }
+
+        .action-btn.delete {
+            background-color: var(--error-color);
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 10px;
+        }
+
+        .pagination button {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .pagination button.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .filter-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .filter-select {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>لوحة تحكم المسؤول</h1>
+        
+        <div id="message" class="message"></div>
+
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-value" id="totalUsers">0</div>
+                <div class="stat-label">إجمالي المستخدمين</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalMessages">0</div>
+                <div class="stat-label">إجمالي الرسائل</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalApiKeys">0</div>
+                <div class="stat-label">إجمالي مفاتيح API</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="activeConnections">0</div>
+                <div class="stat-label">الاتصالات النشطة</div>
+            </div>
+        </div>
+
+        <div class="tab-container">
+            <button class="tab-button active" onclick="showTab('users')">المستخدمين</button>
+            <button class="tab-button" onclick="showTab('messages')">الرسائل</button>
+            <button class="tab-button" onclick="showTab('apiKeys')">مفاتيح API</button>
+            <button class="tab-button" onclick="showTab('logs')">سجلات النظام</button>
+        </div>
+
+        <!-- قسم المستخدمين -->
+        <div id="users" class="tab-content active">
+            <div class="filter-container">
+                <input type="text" class="search-box" placeholder="بحث عن مستخدم..." oninput="filterUsers(this.value)">
+                <select class="filter-select" onchange="filterUsersByStatus(this.value)">
+                    <option value="all">جميع الحالات</option>
+                    <option value="active">نشط</option>
+                    <option value="inactive">غير نشط</option>
+                </select>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>البريد الإلكتروني</th>
+                        <th>تاريخ التسجيل</th>
+                        <th>آخر تسجيل دخول</th>
+                        <th>عنوان IP</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="usersList"></tbody>
+            </table>
+            <div class="pagination" id="usersPagination"></div>
+        </div>
+
+        <!-- قسم الرسائل -->
+        <div id="messages" class="tab-content">
+            <div class="filter-container">
+                <input type="text" class="search-box" placeholder="بحث في الرسائل..." oninput="filterMessages(this.value)">
+                <select class="filter-select" onchange="filterMessagesByStatus(this.value)">
+                    <option value="all">جميع الحالات</option>
+                    <option value="sent">تم الإرسال</option>
+                    <option value="failed">فشل الإرسال</option>
+                </select>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>المرسل</th>
+                        <th>الرقم</th>
+                        <th>الرسالة</th>
+                        <th>التاريخ</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="messagesList"></tbody>
+            </table>
+            <div class="pagination" id="messagesPagination"></div>
+        </div>
+
+        <!-- قسم مفاتيح API -->
+        <div id="apiKeys" class="tab-content">
+            <div class="filter-container">
+                <input type="text" class="search-box" placeholder="بحث عن مفتاح..." oninput="filterApiKeys(this.value)">
+                <select class="filter-select" onchange="filterApiKeysByStatus(this.value)">
+                    <option value="all">جميع الحالات</option>
+                    <option value="active">نشط</option>
+                    <option value="inactive">غير نشط</option>
+                </select>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>المفتاح</th>
+                        <th>المستخدم</th>
+                        <th>تاريخ الإنشاء</th>
+                        <th>آخر استخدام</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="apiKeysList"></tbody>
+            </table>
+            <div class="pagination" id="apiKeysPagination"></div>
+        </div>
+
+        <!-- قسم سجلات النظام -->
+        <div id="logs" class="tab-content">
+            <div class="filter-container">
+                <input type="text" class="search-box" placeholder="بحث في السجلات..." oninput="filterLogs(this.value)">
+                <select class="filter-select" onchange="filterLogsByType(this.value)">
+                    <option value="all">جميع الأنواع</option>
+                    <option value="error">أخطاء</option>
+                    <option value="warning">تحذيرات</option>
+                    <option value="info">معلومات</option>
+                </select>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>التاريخ</th>
+                        <th>النوع</th>
+                        <th>الرسالة</th>
+                        <th>المستخدم</th>
+                        <th>عنوان IP</th>
+                    </tr>
+                </thead>
+                <tbody id="logsList"></tbody>
+            </table>
+            <div class="pagination" id="logsPagination"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'users';
+        const token = localStorage.getItem('token');
+
+        // التحقق من وجود التوكن وصلاحيات المسؤول
+        async function checkAdminAccess() {
+            try {
+                if (!token) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const response = await fetch('/api/auth/user', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('غير مصرح لك بالوصول');
+                }
+
+                const userData = await response.json();
+                console.log('بيانات المستخدم:', userData); // إضافة سجل للتصحيح
+
+                // التحقق من أن المستخدم هو المالك
+                if (userData.email === 'yousefjaser2020@gmail.com') {
+                    return true;
+                }
+
+                // إذا لم يكن المستخدم هو المالك، تحقق من صلاحيات المسؤول
+                if (!userData.customClaims || !userData.customClaims.admin) {
+                    window.location.href = '/home';
+                    return false;
+                }
+
+                return true;
+            } catch (error) {
+                console.error('خطأ في التحقق من الصلاحيات:', error);
+                window.location.href = '/home';
+                return false;
+            }
+        }
+
+        // تحميل البيانات الإحصائية
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/admin/stats', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في تحميل الإحصائيات');
+
+                const data = await response.json();
+                document.getElementById('totalUsers').textContent = data.totalUsers || 0;
+                document.getElementById('totalMessages').textContent = data.totalMessages || 0;
+                document.getElementById('totalApiKeys').textContent = data.totalApiKeys || 0;
+                document.getElementById('activeConnections').textContent = data.activeConnections || 0;
+            } catch (error) {
+                showMessage('حدث خطأ في تحميل الإحصائيات', 'error');
+            }
+        }
+
+        // تحميل المستخدمين
+        async function loadUsers() {
+            try {
+                console.log('جاري تحميل المستخدمين...'); // إضافة سجل للتصحيح
+                
+                const response = await fetch('/api/admin/users', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                console.log('استجابة الخادم:', response); // إضافة سجل للتصحيح
+
+                if (!response.ok) {
+                    throw new Error(`فشل في تحميل المستخدمين: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('بيانات المستخدمين:', data); // إضافة سجل للتصحيح
+
+                const tbody = document.querySelector('#usersList');
+                tbody.innerHTML = '';
+
+                if (!data.items || !Array.isArray(data.items)) {
+                    console.error('بيانات المستخدمين غير صحيحة:', data);
+                    throw new Error('تنسيق البيانات غير صحيح');
+                }
+
+                data.items.forEach(user => {
+                    const row = `
+                        <tr>
+                            <td>${user.email || 'غير متوفر'}</td>
+                            <td>${user.createdAt ? new Date(user.createdAt).toLocaleString('ar-SA') : 'غير متوفر'}</td>
+                            <td>${user.lastLogin ? new Date(user.lastLogin).toLocaleString('ar-SA') : 'غير متوفر'}</td>
+                            <td>${user.ip || 'غير متوفر'}</td>
+                            <td class="${user.active ? 'status-active' : 'status-inactive'}">
+                                ${user.active ? 'نشط' : 'غير نشط'}
+                            </td>
+                            <td>
+                                <button class="action-btn" onclick="toggleUserStatus('${user.id}')">
+                                    ${user.active ? 'تعطيل' : 'تفعيل'}
+                                </button>
+                                <button class="action-btn delete" onclick="deleteUser('${user.id}')">حذف</button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (error) {
+                console.error('خطأ في تحميل المستخدمين:', error);
+                showMessage(`حدث خطأ في تحميل المستخدمين: ${error.message}`, 'error');
+            }
+        }
+
+        // تحميل الرسائل
+        async function loadMessages() {
+            try {
+                const response = await fetch('/api/admin/messages', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في تحميل الرسائل');
+
+                const data = await response.json();
+                const tbody = document.querySelector('#messages table tbody');
+                tbody.innerHTML = '';
+
+                data.items.forEach(message => {
+                    const row = `
+                        <tr>
+                            <td>${message.sender}</td>
+                            <td>${message.number}</td>
+                            <td>${message.message}</td>
+                            <td>${new Date(message.date).toLocaleString('ar-SA')}</td>
+                            <td>${message.status}</td>
+                            <td>
+                                <button class="action-btn delete" onclick="deleteMessage('${message.id}')">حذف</button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (error) {
+                showMessage('حدث خطأ في تحميل الرسائل', 'error');
+            }
+        }
+
+        // تحميل مفاتيح API
+        async function loadApiKeys() {
+            try {
+                const response = await fetch('/api/admin/keys', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في تحميل مفاتيح API');
+
+                const data = await response.json();
+                const tbody = document.querySelector('#apiKeys table tbody');
+                tbody.innerHTML = '';
+
+                data.items.forEach(key => {
+                    const row = `
+                        <tr>
+                            <td>${key.key}</td>
+                            <td>${key.user}</td>
+                            <td>${new Date(key.createdAt).toLocaleString('ar-SA')}</td>
+                            <td>${key.lastUsed ? new Date(key.lastUsed).toLocaleString('ar-SA') : 'لم يستخدم بعد'}</td>
+                            <td class="${key.active ? 'status-active' : 'status-inactive'}">
+                                ${key.active ? 'نشط' : 'غير نشط'}
+                            </td>
+                            <td>
+                                <button class="action-btn" onclick="toggleApiKeyStatus('${key.id}')">
+                                    ${key.active ? 'تعطيل' : 'تفعيل'}
+                                </button>
+                                <button class="action-btn delete" onclick="deleteApiKey('${key.id}')">حذف</button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (error) {
+                showMessage('حدث خطأ في تحميل مفاتيح API', 'error');
+            }
+        }
+
+        // تحميل السجلات
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/admin/logs', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في تحميل السجلات');
+
+                const data = await response.json();
+                const tbody = document.querySelector('#logs table tbody');
+                tbody.innerHTML = '';
+
+                data.items.forEach(log => {
+                    const row = `
+                        <tr>
+                            <td>${new Date(log.timestamp).toLocaleString('ar-SA')}</td>
+                            <td>${log.type}</td>
+                            <td>${log.message}</td>
+                            <td>${log.user}</td>
+                            <td>${log.ip}</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (error) {
+                showMessage('حدث خطأ في تحميل السجلات', 'error');
+            }
+        }
+
+        // عرض رسالة للمستخدم
+        function showMessage(message, type) {
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = message;
+            messageElement.className = `message ${type}`;
+            messageElement.style.display = 'block';
+            setTimeout(() => {
+                messageElement.style.display = 'none';
+            }, 3000);
+        }
+
+        // تبديل التبويبات
+        function showTab(tabName) {
+            currentTab = tabName;
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            document.querySelector(`button[onclick="showTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+            
+            // تحميل البيانات للتبويب المحدد
+            switch(tabName) {
+                case 'users':
+                    loadUsers();
+                    break;
+                case 'messages':
+                    loadMessages();
+                    break;
+                case 'apiKeys':
+                    loadApiKeys();
+                    break;
+                case 'logs':
+                    loadLogs();
+                    break;
+            }
+        }
+
+        // تحميل البيانات عند فتح الصفحة
+        window.addEventListener('load', async () => {
+            try {
+                console.log('بدء تحميل الصفحة...'); // إضافة سجل للتصحيح
+                const isAdmin = await checkAdminAccess();
+                if (!isAdmin) {
+                    return;
+                }
+                await loadStats();
+                await showTab('users');
+            } catch (error) {
+                console.error('خطأ في تحميل الصفحة:', error);
+                showMessage('حدث خطأ في تحميل الصفحة', 'error');
+            }
+        });
+
+        // وظائف إدارة المستخدمين
+        async function toggleUserStatus(userId) {
+            try {
+                const response = await fetch(`/api/admin/users/${userId}/toggle`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في تغيير حالة المستخدم');
+
+                showMessage('تم تغيير حالة المستخدم بنجاح', 'success');
+                loadUsers();
+            } catch (error) {
+                showMessage('حدث خطأ في تغيير حالة المستخدم', 'error');
+            }
+        }
+
+        async function deleteUser(userId) {
+            if (!confirm('هل أنت متأكد من حذف هذا المستخدم؟')) return;
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في حذف المستخدم');
+
+                showMessage('تم حذف المستخدم بنجاح', 'success');
+                loadUsers();
+            } catch (error) {
+                showMessage('حدث خطأ في حذف المستخدم', 'error');
+            }
+        }
+
+        // وظائف إدارة مفاتيح API
+        async function toggleApiKeyStatus(keyId) {
+            try {
+                const response = await fetch(`/api/admin/keys/${keyId}/toggle`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في تغيير حالة المفتاح');
+
+                showMessage('تم تغيير حالة المفتاح بنجاح', 'success');
+                loadApiKeys();
+            } catch (error) {
+                showMessage('حدث خطأ في تغيير حالة المفتاح', 'error');
+            }
+        }
+
+        async function deleteApiKey(keyId) {
+            if (!confirm('هل أنت متأكد من حذف هذا المفتاح؟')) return;
+
+            try {
+                const response = await fetch(`/api/admin/keys/${keyId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في حذف المفتاح');
+
+                showMessage('تم حذف المفتاح بنجاح', 'success');
+                loadApiKeys();
+            } catch (error) {
+                showMessage('حدث خطأ في حذف المفتاح', 'error');
+            }
+        }
+
+        // وظائف إدارة الرسائل
+        async function deleteMessage(messageId) {
+            if (!confirm('هل أنت متأكد من حذف هذه الرسالة؟')) return;
+
+            try {
+                const response = await fetch(`/api/admin/messages/${messageId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('فشل في حذف الرسالة');
+
+                showMessage('تم حذف الرسالة بنجاح', 'success');
+                loadMessages();
+            } catch (error) {
+                showMessage('حدث خطأ في حذف الرسالة', 'error');
+            }
+        }
+    </script>
+</body>
+</html> 

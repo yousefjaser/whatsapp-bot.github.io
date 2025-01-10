@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تأكيد البريد الإلكتروني - واتساب بوت</title>
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+
+        .message {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .success {
+            background-color: rgba(37, 211, 102, 0.1);
+            color: var(--success-color);
+        }
+
+        .error {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--error-color);
+        }
+
+        .loading {
+            color: var(--primary-color);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+            margin-top: 20px;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>تأكيد البريد الإلكتروني</h1>
+        <div id="message" class="message loading">جاري التحقق من البريد الإلكتروني...</div>
+        <button id="loginButton" class="hidden" onclick="window.location.href='/login'">تسجيل الدخول</button>
+        <button id="resendButton" class="hidden">إعادة إرسال رابط التأكيد</button>
+    </div>
+
+    <script>
+        const messageDiv = document.getElementById('message');
+        const loginButton = document.getElementById('loginButton');
+        const resendButton = document.getElementById('resendButton');
+
+        // الحصول على رمز التأكيد من URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+        async function verifyEmail() {
+            if (!token) {
+                messageDiv.textContent = 'رابط التأكيد غير صالح';
+                messageDiv.className = 'message error';
+                resendButton.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/verify-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageDiv.textContent = 'تم تأكيد بريدك الإلكتروني بنجاح!';
+                    messageDiv.className = 'message success';
+                    loginButton.classList.remove('hidden');
+                } else {
+                    messageDiv.textContent = data.error;
+                    messageDiv.className = 'message error';
+                    resendButton.classList.remove('hidden');
+                }
+            } catch (error) {
+                messageDiv.textContent = 'حدث خطأ أثناء تأكيد البريد الإلكتروني';
+                messageDiv.className = 'message error';
+                resendButton.classList.remove('hidden');
+            }
+        }
+
+        resendButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/auth/resend-verification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageDiv.textContent = 'تم إرسال رابط تأكيد جديد إلى بريدك الإلكتروني';
+                    messageDiv.className = 'message success';
+                    resendButton.classList.add('hidden');
+                } else {
+                    messageDiv.textContent = data.error;
+                    messageDiv.className = 'message error';
+                }
+            } catch (error) {
+                messageDiv.textContent = 'حدث خطأ أثناء إرسال رابط التأكيد';
+                messageDiv.className = 'message error';
+            }
+        });
+
+        // بدء عملية التحقق عند تحميل الصفحة
+        verifyEmail();
+    </script>
+</body>
+</html> 

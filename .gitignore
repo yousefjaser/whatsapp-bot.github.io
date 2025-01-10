@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# WhatsApp session files
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Firebase config
+firebase-config.json
+*firebase*.json
+*.key
+*.pem
+
+# Authentication files
+auth_info.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build directory
+build/

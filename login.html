@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول - واتساب بوت</title>
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+            margin-bottom: 15px;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .links {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .links a {
+            color: var(--primary-color);
+            text-decoration: none;
+            margin: 0 10px;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .success {
+            background-color: rgba(37, 211, 102, 0.1);
+            color: var(--success-color);
+        }
+
+        .error {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--error-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>تسجيل الدخول</h1>
+        <div id="message" style="display: none;"></div>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="email">البريد الإلكتروني</label>
+                <input type="email" id="email" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">كلمة المرور</label>
+                <input type="password" id="password" required>
+            </div>
+            
+            <button type="submit">تسجيل الدخول</button>
+        </form>
+
+        <div class="links">
+            <a href="/register">إنشاء حساب جديد</a>
+            <a href="/forgot-password">نسيت كلمة المرور؟</a>
+        </div>
+    </div>
+
+    <!-- إضافة مكتبات Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+
+    <script>
+        // تهيئة Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyCP7a2MRCXqtTP4yMJDtnXrQ3TjHuDA2ng",
+            authDomain: "whatsappbot-b9a4c.firebaseapp.com",
+            projectId: "whatsappbot-b9a4c",
+            storageBucket: "whatsappbot-b9a4c.firebasestorage.app",
+            messagingSenderId: "521034032997",
+            appId: "1:521034032997:web:8db45e183477d227b1238c"
+        };
+
+        // تهيئة Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        const loginForm = document.getElementById('loginForm');
+        const messageDiv = document.getElementById('message');
+
+        function showMessage(text, type) {
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = 'block';
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'خطأ في تسجيل الدخول');
+                }
+
+                if (data.token) {
+                    localStorage.setItem('token', data.token);
+                    document.cookie = `token=${data.token}; path=/`;
+                    showMessage('تم تسجيل الدخول بنجاح!', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/home';
+                    }, 1000);
+                }
+            } catch (error) {
+                console.error('خطأ في تسجيل الدخول:', error);
+                showMessage(error.message, 'error');
+            }
+        });
+    </script>
+</body>
+</html> 

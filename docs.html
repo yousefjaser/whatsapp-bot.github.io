@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>توثيق API - واتساب بوت</title>
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+            --code-bg: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2, h3 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+
+        .section {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .endpoint {
+            background: var(--code-bg);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .method {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin-left: 10px;
+            color: white;
+        }
+
+        .method.post {
+            background-color: var(--success-color);
+        }
+
+        .method.get {
+            background-color: var(--primary-color);
+        }
+
+        .method.delete {
+            background-color: var(--error-color);
+        }
+
+        .url {
+            font-family: monospace;
+            font-size: 16px;
+            color: var(--secondary-color);
+        }
+
+        .description {
+            margin: 10px 0;
+        }
+
+        .params {
+            margin: 15px 0;
+        }
+
+        .param {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+
+        .param-name {
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+
+        .param-type {
+            color: #666;
+            font-style: italic;
+            margin-right: 10px;
+        }
+
+        .param-required {
+            color: var(--error-color);
+            font-weight: bold;
+        }
+
+        .response {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+
+        .response-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+
+        pre {
+            background: var(--code-bg);
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+
+        code {
+            font-family: monospace;
+            background: var(--code-bg);
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        .note {
+            background-color: rgba(18, 140, 126, 0.1);
+            border: 1px solid var(--primary-color);
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+
+        .warning {
+            background-color: rgba(220, 53, 69, 0.1);
+            border: 1px solid var(--error-color);
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+
+        .tab-container {
+            margin: 20px 0;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            padding: 10px 20px;
+            border: none;
+            background: var(--code-bg);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .tab-button.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .copy-btn {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            float: left;
+        }
+
+        .copy-btn:hover {
+            background-color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>توثيق API</h1>
+        
+        <div class="note">
+            <strong>ملاحظة:</strong> يجب إرسال مفتاح API في رأس الطلب مع كل طلب. استخدم الرأس <code>X-API-Key</code> لإرسال المفتاح.
+        </div>
+
+        <div class="section">
+            <h2>المصادقة</h2>
+            <p>للحصول على مفتاح API، يجب عليك:</p>
+            <ol>
+                <li>تسجيل حساب في النظام</li>
+                <li>تسجيل الدخول إلى حسابك</li>
+                <li>الانتقال إلى لوحة تحكم API</li>
+                <li>إنشاء مفتاح API جديد</li>
+            </ol>
+
+            <div class="warning">
+                <strong>تحذير:</strong> لا تشارك مفتاح API الخاص بك مع أي شخص. إذا كنت تشك في أن مفتاحك قد تم اختراقه، قم بإلغاء تنشيطه وإنشاء مفتاح جديد.
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>النقاط النهائية</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="url">/api/send</span>
+                </div>
+                <div class="description">إرسال رسالة WhatsApp إلى رقم محدد.</div>
+                
+                <div class="params">
+                    <h3>المعلمات المطلوبة:</h3>
+                    <div class="param">
+                        <span class="param-name">phone</span>
+                        <span class="param-type">string</span>
+                        <span class="param-required">(مطلوب)</span>
+                        <p>رقم الهاتف بتنسيق دولي (مثال: 966501234567)</p>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">message</span>
+                        <span class="param-type">string</span>
+                        <span class="param-required">(مطلوب)</span>
+                        <p>نص الرسالة المراد إرسالها</p>
+                    </div>
+                </div>
+
+                <div class="response">
+                    <div class="response-title">مثال على الطلب:</div>
+                    <pre>
+{
+    "phone": "966501234567",
+    "message": "مرحباً! هذه رسالة تجريبية."
+}</pre>
+
+                    <div class="response-title">الاستجابة الناجحة (200):</div>
+                    <pre>
+{
+    "success": true,
+    "messageId": "123456789"
+}</pre>
+
+                    <div class="response-title">استجابة الخطأ (400):</div>
+                    <pre>
+{
+    "error": "رقم الهاتف غير صالح"
+}</pre>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="url">/api/messages</span>
+                </div>
+                <div class="description">استرجاع قائمة الرسائل المرسلة.</div>
+                
+                <div class="params">
+                    <h3>المعلمات الاختيارية:</h3>
+                    <div class="param">
+                        <span class="param-name">limit</span>
+                        <span class="param-type">number</span>
+                        <p>عدد النتائج في الصفحة (الافتراضي: 10)</p>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">page</span>
+                        <span class="param-type">number</span>
+                        <p>رقم الصفحة (الافتراضي: 1)</p>
+                    </div>
+                </div>
+
+                <div class="response">
+                    <div class="response-title">الاستجابة الناجحة (200):</div>
+                    <pre>
+{
+    "messages": [
+        {
+            "id": "123456789",
+            "phone": "966501234567",
+            "message": "مرحباً! هذه رسالة تجريبية.",
+            "status": "sent",
+            "timestamp": "2024-01-01T12:00:00Z"
+        }
+    ],
+    "total": 1,
+    "page": 1,
+    "totalPages": 1
+}</pre>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method delete">DELETE</span>
+                    <span class="url">/api/messages/:messageId</span>
+                </div>
+                <div class="description">حذف رسالة محددة.</div>
+                
+                <div class="params">
+                    <h3>المعلمات المطلوبة:</h3>
+                    <div class="param">
+                        <span class="param-name">messageId</span>
+                        <span class="param-type">string</span>
+                        <span class="param-required">(مطلوب)</span>
+                        <p>معرف الرسالة المراد حذفها</p>
+                    </div>
+                </div>
+
+                <div class="response">
+                    <div class="response-title">الاستجابة الناجحة (200):</div>
+                    <pre>
+{
+    "success": true
+}</pre>
+
+                    <div class="response-title">استجابة الخطأ (404):</div>
+                    <pre>
+{
+    "error": "الرسالة غير موجودة"
+}</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>أمثلة على الكود</h2>
+            
+            <div class="tab-container">
+                <div class="tab-buttons">
+                    <button class="tab-button active" onclick="showTab('nodejs')">Node.js</button>
+                    <button class="tab-button" onclick="showTab('python')">Python</button>
+                    <button class="tab-button" onclick="showTab('php')">PHP</button>
+                </div>
+
+                <div id="nodejs" class="tab-content active">
+                    <button class="copy-btn" onclick="copyCode('nodejs-code')">نسخ</button>
+                    <pre id="nodejs-code">
+const axios = require('axios');
+
+const API_KEY = 'your-api-key';
+const BASE_URL = 'https://your-domain.com/api';
+
+// إرسال رسالة
+async function sendMessage(phone, message) {
+    try {
+        const response = await axios.post(`${BASE_URL}/send`, {
+            phone,
+            message
+        }, {
+            headers: {
+                'X-API-Key': API_KEY
+            }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error:', error.response.data);
+        throw error;
+    }
+}
+
+// استرجاع الرسائل
+async function getMessages(page = 1, limit = 10) {
+    try {
+        const response = await axios.get(`${BASE_URL}/messages`, {
+            params: { page, limit },
+            headers: {
+                'X-API-Key': API_KEY
+            }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error:', error.response.data);
+        throw error;
+    }
+}</pre>
+                </div>
+
+                <div id="python" class="tab-content">
+                    <button class="copy-btn" onclick="copyCode('python-code')">نسخ</button>
+                    <pre id="python-code">
+import requests
+
+API_KEY = 'your-api-key'
+BASE_URL = 'https://your-domain.com/api'
+
+def send_message(phone, message):
+    try:
+        response = requests.post(
+            f'{BASE_URL}/send',
+            json={
+                'phone': phone,
+                'message': message
+            },
+            headers={
+                'X-API-Key': API_KEY
+            }
+        )
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f'Error: {e}')
+        raise
+
+def get_messages(page=1, limit=10):
+    try:
+        response = requests.get(
+            f'{BASE_URL}/messages',
+            params={
+                'page': page,
+                'limit': limit
+            },
+            headers={
+                'X-API-Key': API_KEY
+            }
+        )
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f'Error: {e}')
+        raise</pre>
+                </div>
+
+                <div id="php" class="tab-content">
+                    <button class="copy-btn" onclick="copyCode('php-code')">نسخ</button>
+                    <pre id="php-code">
+&lt;?php
+
+$API_KEY = 'your-api-key';
+$BASE_URL = 'https://your-domain.com/api';
+
+function sendMessage($phone, $message) {
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => $BASE_URL . '/send',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode([
+            'phone' => $phone,
+            'message' => $message
+        ]),
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'X-API-Key: ' . $API_KEY
+        ]
+    ]);
+    
+    $response = curl_exec($curl);
+    $error = curl_error($curl);
+    curl_close($curl);
+    
+    if ($error) {
+        throw new Exception('Error: ' . $error);
+    }
+    
+    return json_decode($response, true);
+}
+
+function getMessages($page = 1, $limit = 10) {
+    $curl = curl_init();
+    
+    curl_setopt_array($curl, [
+        CURLOPT_URL => $BASE_URL . '/messages?page=' . $page . '&limit=' . $limit,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'X-API-Key: ' . $API_KEY
+        ]
+    ]);
+    
+    $response = curl_exec($curl);
+    $error = curl_error($curl);
+    curl_close($curl);
+    
+    if ($error) {
+        throw new Exception('Error: ' . $error);
+    }
+    
+    return json_decode($response, true);
+}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // إخفاء كل المحتويات
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // إزالة التنشيط من كل الأزرار
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // تنشيط المحتوى والزر المحدد
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function copyCode(elementId) {
+            const codeElement = document.getElementById(elementId);
+            const text = codeElement.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'تم النسخ!';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('فشل في نسخ النص:', err);
+            });
+        }
+    </script>
+</body>
+</html> 

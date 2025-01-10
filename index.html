@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>واتساب بوت</title>
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        #qrcode {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        #qrcode img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+
+        .phone-input-container {
+            display: flex;
+            gap: 12px;
+        }
+
+        #countryCode {
+            width: 180px;
+            background-color: white;
+        }
+
+        #phone {
+            flex: 1;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--secondary-color);
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            text-align: center;
+            margin: 15px 0;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .success {
+            background-color: rgba(37, 211, 102, 0.1);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .error {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--error-color);
+            border: 1px solid var(--error-color);
+        }
+
+        #refreshButton {
+            margin-top: 15px;
+            background-color: #34B7F1;
+        }
+
+        #refreshButton:hover {
+            background-color: #2980b9;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+            }
+
+            .phone-input-container {
+                flex-direction: column;
+            }
+
+            #countryCode {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>واتساب بوت</h1>
+        <div id="status"></div>
+        <div id="qrcode"></div>
+        <button id="requestQRButton" class="action-button" style="display: none;">طلب رمز QR</button>
+        
+        <form id="messageForm" style="display: none;">
+            <div class="form-group">
+                <label for="name">الاسم:</label>
+                <input type="text" id="name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="countryCode">رمز الدولة:</label>
+                <select id="countryCode" required>
+                    <!-- سيتم تعبئة هذا من ملف countries.js -->
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="phone">رقم الهاتف:</label>
+                <input type="tel" id="phone" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="message">الرسالة:</label>
+                <textarea id="message" required></textarea>
+            </div>
+            
+            <button type="submit">إرسال</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="countries.js"></script>
+    <script>
+        // إضافة التحقق من التوكن في بداية الملف
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+        }
+
+        // تهيئة Socket.IO مع التوكن
+        const socket = io({
+            auth: {
+                token: token
+            }
+        });
+
+        // إضافة التوكن إلى رأس الطلبات
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
+
+        const qrcodeDiv = document.getElementById('qrcode');
+        const statusDiv = document.getElementById('status');
+        const messageForm = document.getElementById('messageForm');
+        const requestQRButton = document.getElementById('requestQRButton');
+        let isConnected = false;
+
+        // التحقق من وجود التوكن
+        if (!token) {
+            window.location.href = '/login';
+        }
+
+        // التحقق من حالة الاتصال عند تحميل الصفحة
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('/api/status', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('غير مصرح');
+                }
+
+                const data = await response.json();
+                
+                if (data.isConnected) {
+                    handleConnection();
+                } else {
+                    handleDisconnection();
+                    requestQRButton.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('خطأ في التحقق من حالة الاتصال:', error);
+                if (error.message === 'غير مصرح') {
+                    localStorage.removeItem('token');
+                    window.location.href = '/login';
+                } else {
+                    handleDisconnection();
+                }
+            }
+        });
+
+        // معالجة أخطاء Socket.IO
+        socket.on('connect_error', (error) => {
+            console.error('خطأ في الاتصال بالسوكت:', error);
+            if (error.message === 'يجب تسجيل الدخول' || error.message === 'رمز المصادقة غير صالح') {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+            }
+        });
+
+        // دالة طلب رمز QR
+        async function requestQRCode() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            try {
+                requestQRButton.disabled = true;
+                statusDiv.textContent = 'جاري إنشاء رمز QR...';
+                statusDiv.className = '';
+
+                const response = await fetch('/api/request-qr', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const data = await response.json();
+
+                if (response.status === 408) {
+                    statusDiv.textContent = 'انتهت مهلة إنشاء رمز QR. حاول مرة أخرى';
+                    statusDiv.className = 'error';
+                    requestQRButton.disabled = false;
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'حدث خطأ في طلب رمز QR');
+                }
+
+                if (data.status === 'connected') {
+                    handleConnection();
+                } else if (data.qrCode) {
+                    handleQR(data.qrCode);
+                }
+            } catch (error) {
+                console.error('خطأ في طلب QR code:', error);
+                statusDiv.textContent = error.message;
+                statusDiv.className = 'error';
+                requestQRButton.disabled = false;
+            }
+        }
+
+        requestQRButton.addEventListener('click', requestQRCode);
+
+        function handleConnection() {
+            isConnected = true;
+            statusDiv.textContent = 'متصل بنجاح';
+            statusDiv.className = 'success';
+            qrcodeDiv.innerHTML = '';
+            messageForm.style.display = 'block';
+            requestQRButton.style.display = 'none';
+        }
+
+        function handleDisconnection() {
+            isConnected = false;
+            statusDiv.textContent = 'غير متصل';
+            statusDiv.className = 'error';
+            messageForm.style.display = 'none';
+            requestQRButton.style.display = 'block';
+            requestQRButton.disabled = false;
+            qrcodeDiv.innerHTML = '';
+        }
+
+        function handleQR(qr) {
+            qrcodeDiv.innerHTML = `<img src="${qr}" alt="QR Code">`;
+            statusDiv.textContent = 'امسح رمز QR للاتصال';
+            statusDiv.className = '';
+            messageForm.style.display = 'none';
+            requestQRButton.style.display = 'none';
+        }
+
+        // تحميل قائمة الدول
+        const countrySelect = document.getElementById('countryCode');
+        countries.forEach(country => {
+            const option = document.createElement('option');
+            option.value = country.code;
+            option.textContent = `${country.flag} ${country.name} (${country.code})`;
+            countrySelect.appendChild(option);
+        });
+
+        // أحداث Socket.IO
+        socket.on('qr', handleQR);
+        socket.on('connected', handleConnection);
+        socket.on('disconnected', handleDisconnection);
+        socket.on('ready', handleConnection);
+        
+        socket.on('messageSent', (response) => {
+            if (response.startsWith('خطأ')) {
+                alert(response);
+            } else {
+                alert('تم إرسال الرسالة بنجاح!');
+                messageForm.reset();
+            }
+        });
+
+        // معالجة النموذج
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                name: document.getElementById('name').value,
+                countryCode: document.getElementById('countryCode').value,
+                phone: document.getElementById('phone').value,
+                message: document.getElementById('message').value
+            };
+
+            socket.emit('sendMessage', data);
+        });
+
+        // زر تحديث QR
+        refreshButton.addEventListener('click', () => {
+            socket.emit('refreshQR');
+            statusDiv.textContent = 'جاري تحديث رمز QR...';
+        });
+
+        // حذف الأحداث المكررة
+        window.removeEventListener('load', checkConnectionStatus);
+
+        // تحديث دالة إرسال الرسالة
+        async function sendMessage() {
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            const countryCode = document.getElementById('countryCode').value;
+            const message = document.getElementById('message').value;
+
+            socket.emit('sendMessage', {
+                name,
+                phone,
+                countryCode,
+                message
+            });
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الصفحة الرئيسية - واتساب بوت</title>
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin: 0;
+        }
+
+        .profile-container {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .profile-image {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--primary-color);
+            transition: transform 0.3s ease;
+        }
+
+        .profile-image:hover {
+            transform: scale(1.1);
+        }
+
+        .profile-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 200px;
+            z-index: 1000;
+            padding: 10px 0;
+        }
+
+        .profile-menu.show {
+            display: block;
+        }
+
+        .profile-menu-item {
+            display: block;
+            padding: 10px 20px;
+            color: var(--text-color);
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+
+        .profile-menu-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .profile-menu-item.logout {
+            color: #dc3545;
+            border-top: 1px solid #eee;
+            margin-top: 5px;
+            padding-top: 10px;
+        }
+
+        .user-info {
+            padding: 10px 20px;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 5px;
+        }
+
+        .user-name {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        .user-email {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .welcome-message {
+            text-align: center;
+            margin: 30px 0;
+            color: var(--text-color);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+
+        .feature-card p {
+            color: #666;
+            margin: 0;
+        }
+
+        .action-button {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            margin-top: 15px;
+            transition: background-color 0.3s ease;
+        }
+
+        .action-button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .nav-link:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .logout {
+            background-color: #ffffff;
+        }
+
+        .logout:hover {
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>واتساب بوت</h1>
+            <div class="profile-container" id="profileContainer">
+                <img src="https://ui-avatars.com/api/?name=User&background=128C7E&color=fff" alt="الصورة الشخصية" class="profile-image" id="profileImage">
+                <div class="profile-menu" id="profileMenu">
+                    <div class="user-info">
+                        <div class="user-name" id="userName">اسم المستخدم</div>
+                        <div class="user-email" id="userEmail">user@example.com</div>
+                    </div>
+                    <a href="/send" class="profile-menu-item">إرسال رسالة</a>
+                    <a href="/api-dashboard" class="profile-menu-item">لوحة تحكم API</a>
+                    <a href="/docs" class="profile-menu-item">توثيق API</a>
+                    <a href="#" class="profile-menu-item" id="addAdminButton" style="display: none;" onclick="showAddAdminDialog()">إضافة مسؤول</a>
+                    <a href="#" class="profile-menu-item logout" onclick="logout()">تسجيل الخروج</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="welcome-message">
+            <h2>مرحباً بك في واتساب بوت</h2>
+            <p>يمكنك إرسال رسائل واتساب بسهولة من خلال واجهة برمجية بسيطة</p>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <h3>إرسال رسائل</h3>
+                <p>أرسل رسائل واتساب بسهولة إلى أي رقم</p>
+                <a href="/send" class="action-button">ابدأ الآن</a>
+            </div>
+            <div class="feature-card">
+                <h3>لوحة التحكم</h3>
+                <p>تحكم في الإعدادات وراقب النشاطات</p>
+                <a href="/admin" class="action-button">فتح اللوحة</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const profileContainer = document.getElementById('profileContainer');
+        const profileMenu = document.getElementById('profileMenu');
+        const profileImage = document.getElementById('profileImage');
+        const userName = document.getElementById('userName');
+        const userEmail = document.getElementById('userEmail');
+
+        // التحقق من وجود التوكن عند تحميل الصفحة
+        window.addEventListener('load', async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            try {
+                // جلب معلومات المستخدم من Firebase
+                const response = await fetch('/api/auth/user', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'same-origin'
+                });
+
+                if (!response.ok) {
+                    throw new Error('فشل في جلب معلومات المستخدم');
+                }
+
+                const userData = await response.json();
+                
+                // تحديث معلومات المستخدم في الواجهة
+                userName.textContent = userData.name || 'المستخدم';
+                userEmail.textContent = userData.email;
+                profileImage.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name)}&background=128C7E&color=fff`;
+
+                // إظهار زر إضافة المسؤول إذا كان المستخدم هو المالك
+                if (userData.email === 'yousefjaser2020@gmail.com') {
+                    document.getElementById('addAdminButton').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+            }
+        });
+
+        // إظهار/إخفاء قائمة الملف الشخصي
+        profileContainer.addEventListener('click', (e) => {
+            e.stopPropagation();
+            profileMenu.classList.toggle('show');
+        });
+
+        // إخفاء القائمة عند النقر خارجها
+        document.addEventListener('click', () => {
+            profileMenu.classList.remove('show');
+        });
+
+        // دالة تسجيل الخروج
+        async function logout() {
+            try {
+                const token = localStorage.getItem('token');
+                if (token) {
+                    // يمكن إضافة طلب للخادم لإلغاء التوكن إذا كنت تريد
+                    localStorage.removeItem('token');
+                }
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('خطأ في تسجيل الخروج:', error);
+            }
+        }
+
+        // دالة لإظهار مربع حوار إضافة مسؤول
+        function showAddAdminDialog() {
+            const email = prompt("أدخل البريد الإلكتروني للمسؤول الجديد:");
+            if (email) {
+                addAdmin(email);
+            }
+        }
+
+        // دالة لإضافة مسؤول جديد
+        async function addAdmin(email) {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/owner/admins', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email })
+                });
+
+                if (!response.ok) {
+                    throw new Error('فشل في إضافة المسؤول');
+                }
+
+                alert('تمت إضافة المسؤول بنجاح!');
+            } catch (error) {
+                console.error('خطأ:', error);
+                alert('حدث خطأ في إضافة المسؤول');
+            }
+        }
+    </script>
+</body>
+</html> 
