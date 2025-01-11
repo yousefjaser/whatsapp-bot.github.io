@@ -203,7 +203,7 @@
         // التحقق من حالة المصادقة
         async function checkAuth() {
             try {
-                const response = await fetch('/auth/check', {
+                const response = await fetch('/api/auth/check', {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
@@ -212,12 +212,14 @@
                     credentials: 'include'
                 });
 
-                if (!response.ok) {
-                    throw new Error(`خطأ في الاتصال: ${response.status}`);
+                // التحقق من نوع المحتوى
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('استجابة غير صالحة من الخادم');
                 }
 
                 const data = await response.json();
-                log('استجابة الخادم:', data);
+                log('استجابة الخادم:', JSON.stringify(data));
                 
                 if (data.isAuthenticated) {
                     log('المستخدم مسجل الدخول بالفعل', 'info');
@@ -246,7 +248,7 @@
                 
                 log('جاري محاولة تسجيل الدخول...', 'info');
                 
-                const response = await fetch('/auth/login', {
+                const response = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -256,13 +258,14 @@
                     body: JSON.stringify({ email, password })
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `خطأ في الاتصال: ${response.status}`);
+                // التحقق من نوع المحتوى
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('استجابة غير صالحة من الخادم');
                 }
 
                 const data = await response.json();
-                log('استجابة الخادم:', data);
+                log('استجابة الخادم:', JSON.stringify(data));
                 
                 if (data.success) {
                     log('تم تسجيل الدخول بنجاح', 'info');
