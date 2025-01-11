@@ -204,6 +204,76 @@
             }
         }
     </style>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+
+    <script>
+        // تهيئة Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyCP7a2MRCXqtTP4yMJDtnXrQ3TjHuDA2ng",
+            authDomain: "whatsappbot-b9a4c.firebaseapp.com",
+            projectId: "whatsappbot-b9a4c",
+            storageBucket: "whatsappbot-b9a4c.firebasestorage.app",
+            messagingSenderId: "521034032997",
+            appId: "1:521034032997:web:8db45e183477d227b1238c"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        // التحقق من حالة تسجيل الدخول
+        async function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/user', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('غير مصرح');
+                }
+
+                const data = await response.json();
+                document.getElementById('userName').textContent = data.name;
+            } catch (error) {
+                console.error('خطأ في التحقق من المصادقة:', error);
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            }
+        }
+
+        // تسجيل الخروج
+        async function logout() {
+            try {
+                const token = localStorage.getItem('token');
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('خطأ في تسجيل الخروج:', error);
+            }
+        }
+
+        // التحقق عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', checkAuth);
+
+        // التحقق كل دقيقة
+        setInterval(checkAuth, 60000);
+    </script>
 </head>
 <body>
     <nav class="navbar">
@@ -328,7 +398,7 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('فشل في جلب معلومات المستخدم');
+                    throw new Error('فشل في إلب معلومات المستخدم');
                 }
 
                 const userData = await response.json();
