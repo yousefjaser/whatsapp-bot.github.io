@@ -209,41 +209,54 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 
     <script>
-        // إنشاء عنصر للتسجيل
-        const logContainer = document.createElement('div');
-        logContainer.style.cssText = `
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px;
-            font-family: monospace;
-            max-height: 200px;
-            overflow-y: auto;
-            z-index: 9999;
-            direction: ltr;
-        `;
-        document.body.appendChild(logContainer);
+        // إضافة عنصر التسجيل مباشرة في body
+        document.write(`
+            <div id="debugLog" style="
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: rgba(0, 0, 0, 0.9);
+                color: white;
+                padding: 10px;
+                font-family: monospace;
+                max-height: 200px;
+                overflow-y: auto;
+                z-index: 9999;
+                direction: ltr;
+                font-size: 12px;
+            "></div>
+        `);
 
-        // دالة التسجيل
+        // دالة التسجيل المحسنة
         function log(message, type = 'info') {
             const colors = {
                 info: '#4CAF50',
                 error: '#f44336',
-                warning: '#ff9800'
+                warning: '#ff9800',
+                debug: '#2196F3'
             };
             
-            const logEntry = document.createElement('div');
-            logEntry.style.color = colors[type];
-            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
-            console.log(`[${type.toUpperCase()}] ${message}`);
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+            
+            // إضافة السجل إلى العنصر المرئي
+            const logElement = document.createElement('div');
+            logElement.style.color = colors[type];
+            logElement.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+            logElement.style.padding = '4px 0';
+            logElement.textContent = logMessage;
+            
+            const debugLog = document.getElementById('debugLog');
+            debugLog.appendChild(logElement);
+            debugLog.scrollTop = debugLog.scrollHeight;
+            
+            // تسجيل في وحدة التحكم أيضاً
+            console.log(logMessage);
         }
 
         // تهيئة Firebase
+        log('بدء تهيئة Firebase...', 'debug');
         const firebaseConfig = {
             apiKey: "AIzaSyCP7a2MRCXqtTP4yMJDtnXrQ3TjHuDA2ng",
             authDomain: "whatsappbot-b9a4c.firebaseapp.com",
@@ -253,69 +266,73 @@
             appId: "1:521034032997:web:8db45e183477d227b1238c"
         };
 
-        firebase.initializeApp(firebaseConfig);
+        try {
+            firebase.initializeApp(firebaseConfig);
+            log('تم تهيئة Firebase بنجاح', 'info');
+        } catch (error) {
+            log(`خطأ في تهيئة Firebase: ${error.message}`, 'error');
+        }
+
         const auth = firebase.auth();
-        log('تم تهيئة Firebase بنجاح');
+        log('تم تهيئة خدمة المصادقة', 'debug');
 
         // دالة للحصول على الكوكيز
         function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
+            try {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) {
+                    const token = parts.pop().split(';').shift();
+                    log(`تم العثور على الكوكي ${name}: ${token.substring(0, 20)}...`, 'debug');
+                    return token;
+                }
+                log(`لم يتم العثور على الكوكي ${name}`, 'warning');
+                return null;
+            } catch (error) {
+                log(`خطأ في قراءة الكوكي ${name}: ${error.message}`, 'error');
+                return null;
+            }
         }
 
         // التحقق من حالة تسجيل الدخول
         async function checkAuth() {
-            log('بدء التحقق من المصادقة...');
+            log('بدء التحقق من المصادقة...', 'debug');
             
-            // التحقق من التوكن في الكوكيز
-            const cookieToken = getCookie('token');
-            log(cookieToken ? 'تم العثور على التوكن في الكوكيز' : 'لم يتم العثور على التوكن في الكوكيز');
-
-            // التحقق من التوكن في التخزين المحلي
-            const localToken = localStorage.getItem('token');
-            log(localToken ? 'تم العثور على التوكن في التخزين المحلي' : 'لم يتم العثور على التوكن في التخزين المحلي');
-
-            // إذا لم يتم العثور على التوكن في أي مكان
-            if (!cookieToken && !localToken) {
-                log('لم يتم العثور على التوكن في أي مكان', 'error');
-                redirectToLogin();
-                return;
-            }
-
             try {
                 // التحقق من Firebase أولاً
                 const currentUser = auth.currentUser;
-                if (!currentUser) {
-                    log('المستخدم غير مسجل في Firebase', 'error');
-                    throw new Error('غير مصرح');
+                if (currentUser) {
+                    log(`مسجل في Firebase كـ: ${currentUser.email}`, 'info');
+                } else {
+                    log('لم يتم العثور على مستخدم في Firebase', 'warning');
                 }
-                log(`مسجل في Firebase كـ: ${currentUser.email}`);
+
+                // التحقق من التوكن
+                const token = getCookie('token') || localStorage.getItem('token');
+                if (!token) {
+                    throw new Error('لم يتم العثور على التوكن');
+                }
 
                 // التحقق من الخادم
-                log('جاري التحقق من التوكن مع الخادم...');
+                log('جاري التحقق من التوكن مع الخادم...', 'debug');
                 const response = await fetch('/api/auth/user', {
                     headers: {
-                        'Authorization': `Bearer ${cookieToken || localToken}`,
+                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     credentials: 'include'
                 });
 
-                if (!response.ok) {
-                    log('فشل التحقق من التوكن مع الخادم', 'error');
-                    throw new Error('غير مصرح');
-                }
-
+                log(`استجابة الخادم: ${response.status}`, 'debug');
                 const data = await response.json();
-                if (!data.success) {
-                    log('الرد من الخادم يشير إلى فشل المصادقة', 'error');
-                    throw new Error(data.error || 'فشل المصادقة');
+                log(`بيانات الاستجابة: ${JSON.stringify(data)}`, 'debug');
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'فشل التحقق من التوكن');
                 }
 
-                log(`تم التحقق بنجاح. مرحباً ${data.user.name}`);
                 document.getElementById('userName').textContent = data.user.name;
+                log(`تم تحديث اسم المستخدم: ${data.user.name}`, 'info');
 
             } catch (error) {
                 log(`خطأ في التحقق: ${error.message}`, 'error');
@@ -326,25 +343,29 @@
 
         // دالة تنظيف بيانات المصادقة
         function clearAuthData() {
-            localStorage.removeItem('token');
-            document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-            log('تم حذف بيانات المصادقة');
+            try {
+                localStorage.removeItem('token');
+                document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+                log('تم حذف بيانات المصادقة', 'info');
+            } catch (error) {
+                log(`خطأ في حذف بيانات المصادقة: ${error.message}`, 'error');
+            }
         }
 
         // دالة إعادة التوجيه لصفحة تسجيل الدخول
         function redirectToLogin() {
-            log('جاري إعادة التوجيه إلى صفحة تسجيل الدخول...');
+            log('جاري إعادة التوجيه إلى صفحة تسجيل الدخول...', 'info');
             window.location.href = '/login.html';
         }
 
         // تسجيل الخروج
         async function logout() {
             try {
-                log('جاري تسجيل الخروج...');
+                log('جاري تسجيل الخروج...', 'debug');
                 const token = getCookie('token') || localStorage.getItem('token');
                 
                 if (token) {
-                    await fetch('/api/auth/logout', {
+                    const response = await fetch('/api/auth/logout', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`,
@@ -352,11 +373,15 @@
                         },
                         credentials: 'include'
                     });
-                    log('تم تسجيل الخروج من الخادم');
+                    
+                    const data = await response.json();
+                    log(`استجابة تسجيل الخروج: ${JSON.stringify(data)}`, 'debug');
                 }
 
-                await auth.signOut();
-                log('تم تسجيل الخروج من Firebase');
+                if (auth.currentUser) {
+                    await auth.signOut();
+                    log('تم تسجيل الخروج من Firebase', 'info');
+                }
 
                 clearAuthData();
                 redirectToLogin();
@@ -368,25 +393,17 @@
         }
 
         // التحقق عند تحميل الصفحة
-        document.addEventListener('DOMContentLoaded', () => {
-            log('تم تحميل الصفحة');
+        window.addEventListener('load', () => {
+            log('تم تحميل الصفحة', 'info');
             checkAuth();
         });
-
-        // التحقق كل دقيقة
-        setInterval(() => {
-            log('تحقق دوري من المصادقة');
-            checkAuth();
-        }, 60000);
 
         // الاستماع لتغييرات حالة المصادقة
         auth.onAuthStateChanged((user) => {
             if (user) {
-                log(`تم تسجيل الدخول كـ: ${user.email}`);
+                log(`تغيير حالة المصادقة: تم تسجيل الدخول كـ ${user.email}`, 'info');
             } else {
-                log('لم يتم تسجيل الدخول', 'warning');
-                clearAuthData();
-                redirectToLogin();
+                log('تغيير حالة المصادقة: لم يتم تسجيل الدخول', 'warning');
             }
         });
     </script>
