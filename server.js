@@ -19,6 +19,9 @@ admin.initializeApp({
 const app = express();
 const port = process.env.PORT || 3001;
 
+// إعداد trust proxy لدعم Railway
+app.set('trust proxy', 1);
+
 // إعداد CORS
 app.use(cors({
     origin: process.env.BASE_URL || 'http://localhost:3001',
@@ -32,9 +35,11 @@ app.use(session({
     secret: process.env.JWT_SECRET || 'your-secret-key',
     resave: false,
     saveUninitialized: false,
+    proxy: true, // إضافة دعم للبروكسي
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
+        sameSite: 'none', // تحديث للعمل مع Railway
         maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
     }
 }));
@@ -42,16 +47,22 @@ app.use(session({
 // تضمين المسارات
 const authRoutes = require('./routes/auth');
 const devicesRoutes = require('./routes/devices');
+const whatsappRoutes = require('./routes/whatsapp');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', devicesRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // تقديم الملفات الثابتة
 app.use(express.static('public'));
 
 // معالجة الصفحات غير الموجودة
 app.use((req, res) => {
-    res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+    if (req.accepts('html')) {
+        res.sendFile(path.join(__dirname, 'public', '404.html'));
+        return;
+    }
+    res.status(404).json({ error: 'الصفحة غير موجودة' });
 });
 
 // معالجة الأخطاء

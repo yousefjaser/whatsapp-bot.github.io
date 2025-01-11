@@ -1,184 +1,238 @@
 <!DOCTYPE html>
-<html dir="rtl">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Bot - الصفحة الرئيسية</title>
+    <title>WhatsApp API - منصة المطورين</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
     <style>
+        :root {
+            --whatsapp-green: #25D366;
+            --whatsapp-dark: #075E54;
+        }
+        
         body {
             background-color: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
+
         .navbar {
-            background-color: #25D366;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background-color: var(--whatsapp-green) !important;
         }
+
         .navbar-brand, .nav-link {
             color: white !important;
         }
-        .main-container {
-            padding: 40px 20px;
+
+        .nav-link:hover {
+            color: #f0f0f0 !important;
         }
+
+        .hero-section {
+            background-color: var(--whatsapp-dark);
+            color: white;
+            padding: 60px 0;
+            margin-bottom: 40px;
+        }
+
         .feature-card {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background-color: white;
+            border-radius: 8px;
             padding: 20px;
             margin-bottom: 20px;
-            transition: transform 0.2s;
-            text-align: center;
-            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
         }
+
         .feature-card:hover {
             transform: translateY(-5px);
         }
+
         .feature-icon {
-            font-size: 2.5rem;
+            font-size: 2rem;
+            color: var(--whatsapp-green);
             margin-bottom: 15px;
-            color: #25D366;
         }
-        .welcome-section {
-            text-align: center;
-            margin-bottom: 40px;
+
+        .code-example {
+            background-color: #2d2d2d;
+            color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
         }
-        .welcome-section h1 {
-            color: #075E54;
-            margin-bottom: 20px;
-        }
+
         .btn-whatsapp {
-            background-color: #25D366;
+            background-color: var(--whatsapp-green);
             color: white;
             border: none;
-            padding: 12px 25px;
-            border-radius: 8px;
-            font-weight: 600;
-            margin: 10px;
+            padding: 10px 20px;
+            margin: 5px;
         }
+
         .btn-whatsapp:hover {
-            background-color: #128C7E;
+            background-color: var(--whatsapp-dark);
             color: white;
         }
-        .error-message {
+
+        #errorMessage {
             display: none;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            background-color: #f8d7da;
-            color: #842029;
-            text-align: center;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
     <!-- شريط التنقل -->
-    <nav class="navbar navbar-expand-lg">
+    <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
-            <a class="navbar-brand" href="#">WhatsApp Bot</a>
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-whatsapp"></i> WhatsApp API
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="#">الرئيسية</a>
+                        <a class="nav-link active" href="/">الرئيسية</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/devices.html">الأجهزة</a>
+                        <a class="nav-link" href="/docs.html">التوثيق</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/playground.html">منصة الاختبار</a>
                     </li>
                 </ul>
-                <div class="d-flex">
-                    <span class="nav-link" id="userEmail"></span>
-                    <button class="btn btn-outline-light ms-2" onclick="logout()">تسجيل الخروج</button>
-                </div>
+                <span class="navbar-text ms-3" id="userEmail"></span>
+                <button class="btn btn-outline-light ms-2" onclick="logout()">تسجيل الخروج</button>
             </div>
         </div>
     </nav>
 
-    <div class="container main-container">
-        <!-- قسم الترحيب -->
-        <div class="welcome-section">
-            <h1>مرحباً بك في WhatsApp Bot</h1>
-            <p class="lead">اختر إحدى الخدمات التالية للبدء</p>
-        </div>
+    <!-- رسالة الخطأ -->
+    <div class="alert alert-danger" role="alert" id="errorMessage"></div>
 
-        <div class="row">
-            <!-- إرسال رسائل -->
-            <div class="col-md-6 mb-4">
-                <div class="feature-card" onclick="window.location.href='/send.html'">
-                    <div class="feature-icon">📨</div>
-                    <h3>إرسال رسائل</h3>
-                    <p>إرسال رسائل WhatsApp بسهولة</p>
-                    <button class="btn btn-whatsapp">ابدأ الآن</button>
-                </div>
-            </div>
-
-            <!-- توثيق API -->
-            <div class="col-md-6 mb-4">
-                <div class="feature-card" onclick="window.location.href='/docs.html'">
-                    <div class="feature-icon">📚</div>
-                    <h3>توثيق API</h3>
-                    <p>تعرف على كيفية استخدام API</p>
-                    <button class="btn btn-whatsapp">اقرأ المزيد</button>
-                </div>
+    <!-- قسم الترحيب -->
+    <div class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 mb-4">مرحباً بك في WhatsApp API</h1>
+            <p class="lead mb-4">أرسل رسائل WhatsApp بسهولة من خلال واجهة برمجة التطبيقات الخاصة بنا</p>
+            <div>
+                <a href="/docs.html" class="btn btn-whatsapp btn-lg">
+                    <i class="bi bi-book"></i> ابدأ الآن
+                </a>
+                <a href="/playground.html" class="btn btn-whatsapp btn-lg">
+                    <i class="bi bi-play-circle"></i> جرب API
+                </a>
             </div>
         </div>
-
-        <!-- رسائل الخطأ -->
-        <div id="errorMessage" class="error-message"></div>
     </div>
 
+    <!-- المميزات -->
+    <div class="container">
+        <div class="row">
+            <div class="col-md-6 col-lg-3">
+                <div class="feature-card text-center">
+                    <i class="bi bi-send feature-icon"></i>
+                    <h3>إرسال رسائل</h3>
+                    <p>أرسل رسائل نصية ووسائط متعددة بسهولة</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="feature-card text-center">
+                    <i class="bi bi-shield-check feature-icon"></i>
+                    <h3>آمن وموثوق</h3>
+                    <p>مصادقة قوية وتشفير للبيانات</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="feature-card text-center">
+                    <i class="bi bi-graph-up feature-icon"></i>
+                    <h3>تتبع الحالة</h3>
+                    <p>تتبع حالة الرسائل في الوقت الفعلي</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="feature-card text-center">
+                    <i class="bi bi-code-slash feature-icon"></i>
+                    <h3>سهل الاستخدام</h3>
+                    <p>واجهة برمجية بسيطة وسهلة الاستخدام</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- مثال على الكود -->
+        <div class="row mt-5">
+            <div class="col-md-12">
+                <h2 class="text-center mb-4">مثال سريع</h2>
+                <div class="code-example">
+                    <pre><code>// إرسال رسالة باستخدام WhatsApp API
+fetch('/api/whatsapp/message/send', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        phone: '966500000000',
+        message: 'مرحباً بك!'
+    })
+});</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- سكربت -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // التحقق من حالة المصادقة
         async function checkAuth() {
             try {
                 const response = await fetch('/api/auth/check', {
-                    credentials: 'include',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                if (!response.ok) {
-                    throw new Error('فشل التحقق من الجلسة');
-                }
-
-                const data = await response.json();
-                document.getElementById('userEmail').textContent = data.email;
-            } catch (error) {
-                const errorMessage = document.getElementById('errorMessage');
-                errorMessage.textContent = error.message;
-                errorMessage.style.display = 'block';
-                setTimeout(() => {
-                    window.location.href = '/login.html';
-                }, 3000);
-            }
-        }
-
-        async function logout() {
-            try {
-                const response = await fetch('/api/auth/logout', {
-                    method: 'POST',
                     credentials: 'include'
                 });
                 
                 if (!response.ok) {
-                    throw new Error('فشل تسجيل الخروج');
+                    throw new Error('غير مصرح لك بالوصول');
                 }
 
-                window.location.href = '/login.html';
+                const data = await response.json();
+                document.getElementById('userEmail').textContent = data.user.email;
             } catch (error) {
-                const errorMessage = document.getElementById('errorMessage');
-                errorMessage.textContent = error.message;
-                errorMessage.style.display = 'block';
+                console.error('خطأ في التحقق من المصادقة:', error);
+                window.location.href = '/login.html';
             }
         }
 
-        // التحقق من الجلسة عند تحميل الصفحة
-        window.addEventListener('load', checkAuth);
+        // تسجيل الخروج
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('خطأ في تسجيل الخروج:', error);
+                showError('حدث خطأ أثناء تسجيل الخروج');
+            }
+        }
 
-        // التحقق من الجلسة كل دقيقة
-        setInterval(checkAuth, 60000);
+        // عرض رسالة خطأ
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // التحقق من المصادقة عند تحميل الصفحة
+        checkAuth();
     </script>
 </body>
 </html> 

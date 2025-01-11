@@ -7,7 +7,15 @@ const rateLimit = require('express-rate-limit');
 // تكوين حد معدل المحاولات للتسجيل
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 دقيقة
-    max: 5 // الحد الأقصى 5 محاولات
+    max: 5, // الحد الأقصى 5 محاولات
+    standardHeaders: true,
+    legacyHeaders: false,
+    trustProxy: true, // إضافة دعم للبروكسي
+    handler: (req, res) => {
+        res.status(429).json({
+            error: 'تم تجاوز الحد الأقصى من المحاولات. الرجاء المحاولة بعد 15 دقيقة'
+        });
+    }
 });
 
 // التحقق من التوكن
@@ -68,7 +76,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: 'none', // تحديث للعمل مع Railway
             maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
         });
 
@@ -87,7 +95,11 @@ router.post('/login', loginLimiter, async (req, res) => {
 
 // تسجيل الخروج
 router.post('/logout', (req, res) => {
-    res.clearCookie('token');
+    res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none'
+    });
     res.json({ message: 'تم تسجيل الخروج بنجاح' });
 });
 

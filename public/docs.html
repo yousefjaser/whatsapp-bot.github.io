@@ -1,306 +1,359 @@
 <!DOCTYPE html>
-<html dir="rtl">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>توثيق API - واتساب بوت</title>
+    <title>WhatsApp API - توثيق API</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
     <style>
         :root {
-            --primary-color: #128C7E;
-            --secondary-color: #075E54;
-            --success-color: #25D366;
-            --error-color: #DC3545;
-            --bg-color: #f0f2f5;
-            --text-color: #333;
-            --code-bg: #f8f9fa;
+            --whatsapp-green: #25D366;
+            --whatsapp-dark: #075E54;
         }
-
+        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.6;
+            background-color: #f8f9fa;
         }
 
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        .navbar {
+            background-color: var(--whatsapp-green) !important;
         }
 
-        h1, h2, h3 {
-            color: var(--primary-color);
+        .navbar-brand, .nav-link {
+            color: white !important;
+        }
+
+        .nav-link:hover {
+            color: #f0f0f0 !important;
+        }
+
+        .docs-sidebar {
+            position: sticky;
+            top: 20px;
+            height: calc(100vh - 100px);
+            overflow-y: auto;
         }
 
         .endpoint {
-            margin: 30px 0;
-            padding: 20px;
-            background: var(--code-bg);
+            background-color: white;
             border-radius: 8px;
-            border-right: 4px solid var(--primary-color);
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .method {
             display: inline-block;
-            padding: 5px 10px;
+            padding: 4px 8px;
             border-radius: 4px;
             color: white;
             font-weight: bold;
-            margin-left: 10px;
+            margin-right: 10px;
         }
 
-        .post { background-color: #49cc90; }
-        .get { background-color: #61affe; }
-        .delete { background-color: #f93e3e; }
-
-        .url {
-            font-family: monospace;
-            padding: 5px 10px;
-            background: #e9ecef;
-            border-radius: 4px;
-        }
+        .method.post { background-color: #28a745; }
+        .method.get { background-color: #007bff; }
+        .method.delete { background-color: #dc3545; }
 
         pre {
-            background: #272822;
-            color: #f8f8f2;
+            background-color: #f8f9fa;
             padding: 15px;
-            border-radius: 8px;
+            border-radius: 4px;
             overflow-x: auto;
         }
 
         code {
-            font-family: monospace;
-            background: #e9ecef;
-            padding: 2px 5px;
-            border-radius: 3px;
+            color: #e83e8c;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
+        .response-example {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
         }
 
-        th, td {
-            padding: 12px;
-            text-align: right;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background-color: var(--code-bg);
-            color: var(--primary-color);
-        }
-
-        .error-codes {
-            margin: 20px 0;
-        }
-
-        .error-code {
-            padding: 10px;
-            border-right: 4px solid var(--error-color);
-            margin: 10px 0;
-            background: #fff5f5;
+        #errorMessage {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
+    <!-- شريط التنقل -->
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-whatsapp"></i> WhatsApp API
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">الرئيسية</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/docs.html">التوثيق</a>
+                    </li>
+                </ul>
+                <div class="d-flex">
+                    <span class="navbar-text ms-3" id="userEmail"></span>
+                    <button class="btn btn-outline-light ms-2" onclick="logout()">تسجيل الخروج</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- رسالة الخطأ -->
+    <div class="alert alert-danger" role="alert" id="errorMessage"></div>
+
+    <!-- المحتوى الرئيسي -->
     <div class="container">
-        <h1>توثيق واجهة برمجة التطبيقات (API)</h1>
-        
-        <h2>نظرة عامة</h2>
-        <p>
-            تتيح واجهة برمجة التطبيقات إرسال رسائل واتساب برمجياً من خلال الأجهزة المتصلة.
-            يتم استخدام مفاتيح API للمصادقة، حيث يرتبط كل مفتاح بجهاز محدد.
-        </p>
+        <div class="row">
+            <!-- القائمة الجانبية -->
+            <div class="col-md-3">
+                <div class="docs-sidebar">
+                    <div class="list-group">
+                        <a href="#authentication" class="list-group-item list-group-item-action">المصادقة</a>
+                        <a href="#sessions" class="list-group-item list-group-item-action">إدارة الجلسات</a>
+                        <a href="#messages" class="list-group-item list-group-item-action">إرسال الرسائل</a>
+                        <a href="#media" class="list-group-item list-group-item-action">إرسال الوسائط</a>
+                        <a href="#location" class="list-group-item list-group-item-action">إرسال المواقع</a>
+                        <a href="#status" class="list-group-item list-group-item-action">حالة الرسائل</a>
+                    </div>
+                </div>
+            </div>
 
-        <h2>المصادقة</h2>
-        <p>
-            يجب إرسال مفتاح API في ترويسة الطلب باستخدام <code>x-api-key</code>.
-            مثال:
-        </p>
-        <pre>
-headers: {
-    'x-api-key': 'YOUR_API_KEY'
-}</pre>
-
-        <h2>نقاط النهاية (Endpoints)</h2>
-
-        <div class="endpoint">
-            <span class="method post">POST</span>
-            <span class="url">/api/keys</span>
-            <p>إنشاء مفتاح API جديد</p>
-            <h3>المعلمات المطلوبة:</h3>
-            <table>
-                <tr>
-                    <th>المعلمة</th>
-                    <th>النوع</th>
-                    <th>الوصف</th>
-                </tr>
-                <tr>
-                    <td>deviceId</td>
-                    <td>string</td>
-                    <td>معرف الجهاز المراد ربط المفتاح به</td>
-                </tr>
-                <tr>
-                    <td>name</td>
-                    <td>string</td>
-                    <td>اسم وصفي للمفتاح</td>
-                </tr>
-            </table>
-            <h3>مثال الاستجابة:</h3>
-            <pre>
+            <!-- محتوى التوثيق -->
+            <div class="col-md-9">
+                <!-- المصادقة -->
+                <section id="authentication" class="mb-5">
+                    <h2>المصادقة</h2>
+                    <p>يتطلب الوصول إلى API توكن مصادقة. يمكنك الحصول على التوكن من خلال تسجيل الدخول.</p>
+                    
+                    <div class="endpoint">
+                        <span class="method post">POST</span>
+                        <code>/api/auth/login</code>
+                        <p>تسجيل الدخول والحصول على توكن المصادقة</p>
+                        
+                        <h5>المعلمات المطلوبة:</h5>
+                        <pre>
 {
-    "apiKey": "generated_api_key",
-    "deviceId": "device_id",
-    "name": "اسم المفتاح"
+    "email": "example@domain.com",
+    "password": "your-password"
 }</pre>
-        </div>
-
-        <div class="endpoint">
-            <span class="method get">GET</span>
-            <span class="url">/api/keys</span>
-            <p>جلب قائمة مفاتيح API الخاصة بالمستخدم</p>
-            <h3>مثال الاستجابة:</h3>
-            <pre>
-[
-    {
-        "key": "api_key",
-        "deviceId": "device_id",
-        "name": "اسم المفتاح",
-        "isActive": true,
-        "createdAt": "timestamp",
-        "lastUsed": "timestamp"
+                        
+                        <h5>مثال على الاستجابة:</h5>
+                        <div class="response-example">
+<pre>{
+    "token": "your-jwt-token",
+    "user": {
+        "uid": "user-id",
+        "email": "example@domain.com"
     }
-]</pre>
-        </div>
-
-        <div class="endpoint">
-            <span class="method delete">DELETE</span>
-            <span class="url">/api/keys/:key</span>
-            <p>حذف مفتاح API</p>
-            <h3>مثال الاستجابة:</h3>
-            <pre>
-{
-    "success": true
 }</pre>
-        </div>
+                        </div>
+                    </div>
+                </section>
 
-        <div class="endpoint">
-            <span class="method post">POST</span>
-            <span class="url">/api/send</span>
-            <p>إرسال رسالة واتساب</p>
-            <h3>المعلمات المطلوبة:</h3>
-            <table>
-                <tr>
-                    <th>المعلمة</th>
-                    <th>النوع</th>
-                    <th>الوصف</th>
-                </tr>
-                <tr>
-                    <td>phone</td>
-                    <td>string</td>
-                    <td>رقم الهاتف مع رمز الدولة (مثال: 972599123456)</td>
-                </tr>
-                <tr>
-                    <td>message</td>
-                    <td>string</td>
-                    <td>نص الرسالة</td>
-                </tr>
-                <tr>
-                    <td>name</td>
-                    <td>string</td>
-                    <td>اسم المستلم (اختياري)</td>
-                </tr>
-            </table>
-            <h3>مثال الاستجابة:</h3>
-            <pre>
-{
-    "success": true,
-    "messageId": "message_id"
+                <!-- إدارة الجلسات -->
+                <section id="sessions" class="mb-5">
+                    <h2>إدارة الجلسات</h2>
+                    <p>قبل إرسال الرسائل، تحتاج إلى إنشاء جلسة واتساب وربطها بحسابك.</p>
+                    
+                    <div class="endpoint">
+                        <span class="method post">POST</span>
+                        <code>/api/whatsapp/session/create</code>
+                        <p>إنشاء جلسة واتساب جديدة</p>
+                        
+                        <h5>الرأس المطلوب:</h5>
+                        <pre>Authorization: Bearer your-jwt-token</pre>
+                        
+                        <h5>مثال على الاستجابة:</h5>
+                        <div class="response-example">
+<pre>{
+    "message": "تم إنشاء الجلسة بنجاح"
 }</pre>
+                        </div>
+                    </div>
+
+                    <div class="endpoint">
+                        <span class="method get">GET</span>
+                        <code>/api/whatsapp/session/status</code>
+                        <p>الحصول على حالة الجلسة الحالية</p>
+                        
+                        <h5>مثال على الاستجابة:</h5>
+                        <div class="response-example">
+<pre>{
+    "status": "ready",
+    "qr": "base64-qr-code",
+    "created": "2023-12-20T12:00:00.000Z"
+}</pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- إرسال الرسائل -->
+                <section id="messages" class="mb-5">
+                    <h2>إرسال الرسائل</h2>
+                    <p>يمكنك إرسال رسائل نصية إلى أي رقم واتساب.</p>
+                    
+                    <div class="endpoint">
+                        <span class="method post">POST</span>
+                        <code>/api/whatsapp/message/send</code>
+                        <p>إرسال رسالة نصية</p>
+                        
+                        <h5>المعلمات المطلوبة:</h5>
+                        <pre>
+{
+    "phone": "966500000000",
+    "message": "مرحباً! هذه رسالة تجريبية."
+}</pre>
+                        
+                        <h5>مثال على الاستجابة:</h5>
+                        <div class="response-example">
+<pre>{
+    "message": "تم إرسال الرسالة بنجاح",
+    "messageId": "message-id"
+}</pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- إرسال الوسائط -->
+                <section id="media" class="mb-5">
+                    <h2>إرسال الوسائط</h2>
+                    <p>يمكنك إرسال صور وملفات وسائط أخرى.</p>
+                    
+                    <div class="endpoint">
+                        <span class="method post">POST</span>
+                        <code>/api/whatsapp/message/send-media</code>
+                        <p>إرسال صورة أو ملف وسائط</p>
+                        
+                        <h5>المعلمات المطلوبة:</h5>
+                        <pre>
+{
+    "phone": "966500000000",
+    "mediaUrl": "https://example.com/image.jpg",
+    "caption": "وصف الصورة"
+}</pre>
+                        
+                        <h5>مثال على الاستجابة:</h5>
+                        <div class="response-example">
+<pre>{
+    "message": "تم إرسال الوسائط بنجاح",
+    "messageId": "message-id"
+}</pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- إرسال المواقع -->
+                <section id="location" class="mb-5">
+                    <h2>إرسال المواقع</h2>
+                    <p>يمكنك إرسال مواقع جغرافية.</p>
+                    
+                    <div class="endpoint">
+                        <span class="method post">POST</span>
+                        <code>/api/whatsapp/message/send-location</code>
+                        <p>إرسال موقع جغرافي</p>
+                        
+                        <h5>المعلمات المطلوبة:</h5>
+                        <pre>
+{
+    "phone": "966500000000",
+    "latitude": 24.7136,
+    "longitude": 46.6753,
+    "description": "الرياض، المملكة العربية السعودية"
+}</pre>
+                        
+                        <h5>مثال على الاستجابة:</h5>
+                        <div class="response-example">
+<pre>{
+    "message": "تم إرسال الموقع بنجاح",
+    "messageId": "message-id"
+}</pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- حالة الرسائل -->
+                <section id="status" class="mb-5">
+                    <h2>حالة الرسائل</h2>
+                    <p>يمكنك التحقق من حالة الرسائل المرسلة.</p>
+                    
+                    <div class="endpoint">
+                        <span class="method get">GET</span>
+                        <code>/api/whatsapp/message/status/:messageId</code>
+                        <p>الحصول على حالة رسالة محددة</p>
+                        
+                        <h5>مثال على الاستجابة:</h5>
+                        <div class="response-example">
+<pre>{
+    "status": "delivered",
+    "timestamp": 1639996800000
+}</pre>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </div>
-
-        <h2>أكواد الأخطاء</h2>
-        <div class="error-codes">
-            <div class="error-code">
-                <strong>400</strong> - طلب غير صالح
-                <ul>
-                    <li>بيانات مفقودة أو غير صحيحة</li>
-                    <li>رقم الهاتف أو الرسالة غير موجودة</li>
-                </ul>
-            </div>
-            <div class="error-code">
-                <strong>401</strong> - خطأ في المصادقة
-                <ul>
-                    <li>مفتاح API غير موجود</li>
-                    <li>مفتاح API غير صالح</li>
-                    <li>مفتاح API غير نشط</li>
-                </ul>
-            </div>
-            <div class="error-code">
-                <strong>403</strong> - غير مصرح
-                <ul>
-                    <li>المستخدم لا يملك صلاحية للوصول للجهاز</li>
-                </ul>
-            </div>
-            <div class="error-code">
-                <strong>404</strong> - غير موجود
-                <ul>
-                    <li>الجهاز غير موجود</li>
-                    <li>مفتاح API غير موجود</li>
-                </ul>
-            </div>
-            <div class="error-code">
-                <strong>429</strong> - تجاوز حد الطلبات
-                <ul>
-                    <li>تم تجاوز الحد الأقصى للطلبات</li>
-                </ul>
-            </div>
-            <div class="error-code">
-                <strong>500</strong> - خطأ في الخادم
-                <ul>
-                    <li>خطأ في الاتصال بالجهاز</li>
-                    <li>خطأ في إرسال الرسالة</li>
-                    <li>خطأ في قاعدة البيانات</li>
-                </ul>
-            </div>
-        </div>
-
-        <h2>أمثلة على الاستخدام</h2>
-        <h3>إرسال رسالة باستخدام cURL:</h3>
-        <pre>
-curl -X POST 'https://your-domain.com/api/send' \
--H 'x-api-key: YOUR_API_KEY' \
--H 'Content-Type: application/json' \
--d '{
-    "phone": "972599123456",
-    "message": "مرحباً!",
-    "name": "محمد"
-}'</pre>
-
-        <h3>إرسال رسالة باستخدام JavaScript:</h3>
-        <pre>
-fetch('https://your-domain.com/api/send', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': 'YOUR_API_KEY'
-    },
-    body: JSON.stringify({
-        phone: '972599123456',
-        message: 'مرحباً!',
-        name: 'محمد'
-    })
-})
-.then(response => response.json())
-.then(data => console.log(data))
-.catch(error => console.error('Error:', error));</pre>
     </div>
+
+    <!-- سكربت -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // التحقق من حالة المصادقة
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check', {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('غير مصرح لك بالوصول');
+                }
+
+                const data = await response.json();
+                document.getElementById('userEmail').textContent = data.user.email;
+            } catch (error) {
+                console.error('خطأ في التحقق من المصادقة:', error);
+                window.location.href = '/login.html';
+            }
+        }
+
+        // تسجيل الخروج
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('خطأ في تسجيل الخروج:', error);
+                showError('حدث خطأ أثناء تسجيل الخروج');
+            }
+        }
+
+        // عرض رسالة خطأ
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // التحقق من المصادقة عند تحميل الصفحة
+        checkAuth();
+    </script>
 </body>
 </html> 
