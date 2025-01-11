@@ -5,15 +5,11 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const path = require('path');
 const admin = require('firebase-admin');
-const dotenv = require('dotenv');
-
-// تحميل متغيرات البيئة
-dotenv.config();
 
 // تهيئة Firebase Admin
-const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 admin.initializeApp({
-    credential: admin.credential.cert(firebaseConfig)
+    credential: admin.credential.cert(serviceAccount)
 });
 
 const app = express();
@@ -31,15 +27,15 @@ app.use(cors({
 // الوسائط
 app.use(express.json());
 app.use(cookieParser());
+
+// إعداد الجلسات
 app.use(session({
-    secret: process.env.JWT_SECRET || 'your-secret-key',
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
     resave: false,
     saveUninitialized: false,
-    proxy: true, // إضافة دعم للبروكسي
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
-        sameSite: 'none', // تحديث للعمل مع Railway
         maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
     }
 }));
@@ -48,13 +44,11 @@ app.use(session({
 const authRoutes = require('./routes/auth');
 const devicesRoutes = require('./routes/devices');
 const whatsappRoutes = require('./routes/whatsapp');
-const sendRoutes = require('./routes/send');
 const apiRoutes = require('./routes/api');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api/send', sendRoutes);
 app.use('/api/v1', apiRoutes);
 
 // تقديم الملفات الثابتة
@@ -62,17 +56,19 @@ app.use(express.static('public'));
 
 // معالجة الصفحات غير الموجودة
 app.use((req, res) => {
-    if (req.accepts('html')) {
-        res.sendFile(path.join(__dirname, 'public', '404.html'));
-        return;
-    }
-    res.status(404).json({ error: 'الصفحة غير موجودة' });
+    res.status(404).json({
+        success: false,
+        error: 'الصفحة غير موجودة'
+    });
 });
 
 // معالجة الأخطاء
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    res.status(500).json({ error: 'حدث خطأ في الخادم' });
+    res.status(500).json({
+        success: false,
+        error: 'حدث خطأ في الخادم'
+    });
 });
 
 // بدء الخادم

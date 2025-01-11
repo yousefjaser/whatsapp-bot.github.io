@@ -1,117 +1,178 @@
 const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
-const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit');
-
-// إعداد rate limiter لتسجيل الدخول
-const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 دقيقة
-    max: 5, // 5 محاولات كحد أقصى
-    message: { message: 'تم تجاوز عدد محاولات تسجيل الدخول المسموح بها. الرجاء المحاولة لاحقاً.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-    trustProxy: true
-});
-
-// التحقق من التوكن
-async function verifyToken(token) {
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const userRecord = await admin.auth().getUser(decoded.uid);
-        return { success: true, user: userRecord };
-    } catch (error) {
-        console.error('خطأ في التحقق من التوكن:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// التحقق من حالة المصادقة
-router.get('/check', async (req, res) => {
-    try {
-        const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-        
-        if (!token) {
-            return res.status(401).json({ message: 'لم يتم العثور على توكن المصادقة' });
-        }
-
-        const result = await verifyToken(token);
-        if (result.success) {
-            res.json({ 
-                isAuthenticated: true, 
-                user: {
-                    uid: result.user.uid,
-                    email: result.user.email,
-                    displayName: result.user.displayName
-                }
-            });
-        } else {
-            res.status(401).json({ message: 'جلسة غير صالحة' });
-        }
-    } catch (error) {
-        console.error('خطأ في التحقق من المصادقة:', error);
-        res.status(500).json({ message: 'حدث خطأ في الخادم' });
-    }
-});
+const bcrypt = require('bcryptjs');
 
 // تسجيل الدخول
-router.post('/login', loginLimiter, async (req, res) => {
+router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        
+
         if (!email || !password) {
-            return res.status(400).json({ message: 'البريد الإلكتروني وكلمة المرور مطلوبان' });
+            return res.status(400).json({
+                success: false,
+                error: 'البريد الإلكتروني وكلمة المرور مطلوبان'
+            });
         }
 
-        // البحث عن المستخدم في Firebase
-        const userRecord = await admin.auth().getUserByEmail(email);
+        // البحث عن المستخدم
+        const usersRef = admin.firestore().collection('users');
+        const snapshot = await usersRef.where('email', '==', email).get();
+
+        if (snapshot.empty) {
+            return res.status(401).json({
+                success: false,
+                error: 'بيانات الدخول غير صحيحة'
+            });
+        }
+
+        const userDoc = snapshot.docs[0];
+        const userData = userDoc.data();
+
+        // التحقق من كلمة المرور
+        const isValid = await bcrypt.compare(password, userData.password);
+
+        if (!isValid) {
+            return res.status(401).json({
+                success: false,
+                error: 'بيانات الدخول غير صحيحة'
+            });
+        }
+
+        // إنشاء جلسة
+        req.session.userId = userDoc.id;
         
-        // إنشاء توكن JWT
-        const token = jwt.sign(
-            { 
-                uid: userRecord.uid,
-                email: userRecord.email
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        // إرسال التوكن في الكوكيز
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
-        });
-
-        // إرسال استجابة النجاح
-        res.json({ 
+        res.json({
             success: true,
             user: {
-                uid: userRecord.uid,
-                email: userRecord.email,
-                displayName: userRecord.displayName
+                id: userDoc.id,
+                email: userData.email,
+                name: userData.name
             }
         });
 
     } catch (error) {
         console.error('خطأ في تسجيل الدخول:', error);
-        res.status(401).json({ message: 'فشل تسجيل الدخول. تحقق من بيانات الدخول.' });
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في تسجيل الدخول'
+        });
+    }
+});
+
+// تسجيل حساب جديد
+router.post('/register', async (req, res) => {
+    try {
+        const { email, password, name } = req.body;
+
+        if (!email || !password || !name) {
+            return res.status(400).json({
+                success: false,
+                error: 'جميع الحقول مطلوبة'
+            });
+        }
+
+        // التحقق من عدم وجود المستخدم
+        const usersRef = admin.firestore().collection('users');
+        const snapshot = await usersRef.where('email', '==', email).get();
+
+        if (!snapshot.empty) {
+            return res.status(400).json({
+                success: false,
+                error: 'البريد الإلكتروني مستخدم بالفعل'
+            });
+        }
+
+        // تشفير كلمة المرور
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // إنشاء المستخدم
+        const userDoc = await usersRef.add({
+            email,
+            password: hashedPassword,
+            name,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            role: 'user'
+        });
+
+        // إنشاء جلسة
+        req.session.userId = userDoc.id;
+
+        res.json({
+            success: true,
+            user: {
+                id: userDoc.id,
+                email,
+                name
+            }
+        });
+
+    } catch (error) {
+        console.error('خطأ في إنشاء الحساب:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في إنشاء الحساب'
+        });
     }
 });
 
 // تسجيل الخروج
 router.post('/logout', (req, res) => {
-    try {
-        res.clearCookie('token', {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none'
+    req.session.destroy(err => {
+        if (err) {
+            console.error('خطأ في تسجيل الخروج:', err);
+            return res.status(500).json({
+                success: false,
+                error: 'حدث خطأ في تسجيل الخروج'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'تم تسجيل الخروج بنجاح'
         });
-        res.json({ message: 'تم تسجيل الخروج بنجاح' });
+    });
+});
+
+// التحقق من حالة المصادقة
+router.get('/status', async (req, res) => {
+    try {
+        if (!req.session.userId) {
+            return res.json({
+                success: true,
+                authenticated: false
+            });
+        }
+
+        const userDoc = await admin.firestore()
+            .collection('users')
+            .doc(req.session.userId)
+            .get();
+
+        if (!userDoc.exists) {
+            return res.json({
+                success: true,
+                authenticated: false
+            });
+        }
+
+        const userData = userDoc.data();
+        res.json({
+            success: true,
+            authenticated: true,
+            user: {
+                id: userDoc.id,
+                email: userData.email,
+                name: userData.name
+            }
+        });
+
     } catch (error) {
-        console.error('خطأ في تسجيل الخروج:', error);
-        res.status(500).json({ message: 'حدث خطأ أثناء تسجيل الخروج' });
+        console.error('خطأ في التحقق من حالة المصادقة:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في التحقق من حالة المصادقة'
+        });
     }
 });
 

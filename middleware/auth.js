@@ -1,36 +1,47 @@
 const admin = require('firebase-admin');
-const jwt = require('jsonwebtoken');
 
-module.exports = async (req, res, next) => {
+// التحقق من صحة الجلسة
+const validateSession = async (req, res, next) => {
     try {
-        // التحقق من وجود التوكن
-        const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-        
-        if (!token) {
-            return res.status(401).json({ error: 'غير مصرح لك بالوصول' });
+        // التحقق من وجود جلسة
+        if (!req.session || !req.session.userId) {
+            return res.status(401).json({
+                success: false,
+                error: 'غير مصرح بالوصول',
+                details: 'يجب تسجيل الدخول أولاً'
+            });
         }
 
-        try {
-            // التحقق من صحة التوكن
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            
-            // التحقق من وجود المستخدم في Firebase
-            const user = await admin.auth().getUser(decoded.uid);
-            
-            // تخزين معلومات المستخدم
-            req.user = {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName
-            };
-            
-            next();
-        } catch (error) {
-            console.error('خطأ في التحقق من التوكن:', error);
-            return res.status(401).json({ error: 'جلسة غير صالحة' });
+        // التحقق من وجود المستخدم في Firebase
+        const userDoc = await admin.firestore()
+            .collection('users')
+            .doc(req.session.userId)
+            .get();
+
+        if (!userDoc.exists) {
+            return res.status(401).json({
+                success: false,
+                error: 'غير مصرح بالوصول',
+                details: 'المستخدم غير موجود'
+            });
         }
+
+        // إضافة بيانات المستخدم للطلب
+        req.user = {
+            id: userDoc.id,
+            ...userDoc.data()
+        };
+
+        next();
     } catch (error) {
-        console.error('خطأ في التحقق من المصادقة:', error);
-        return res.status(500).json({ error: 'حدث خطأ أثناء التحقق من المصادقة' });
+        console.error('خطأ في التحقق من الجلسة:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في التحقق من الجلسة'
+        });
     }
+};
+
+module.exports = {
+    validateSession
 }; 
