@@ -209,6 +209,47 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 
     <script>
+        // إنشاء عنصر للتسجيل
+        const logContainer = document.createElement('div');
+        logContainer.style.cssText = `
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 9999;
+        `;
+        document.body.appendChild(logContainer);
+
+        // دالة التسجيل
+        function log(message, type = 'info') {
+            const colors = {
+                info: '#4CAF50',
+                error: '#f44336',
+                warning: '#ff9800'
+            };
+            
+            const logEntry = document.createElement('div');
+            logEntry.style.color = colors[type];
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // دالة للحصول على الكوكيز
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
         // تهيئة Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyCP7a2MRCXqtTP4yMJDtnXrQ3TjHuDA2ng",
@@ -221,58 +262,140 @@
 
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
+        log('تم تهيئة Firebase بنجاح');
 
         // التحقق من حالة تسجيل الدخول
         async function checkAuth() {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                window.location.href = '/login.html';
+            log('بدء التحقق من المصادقة...');
+            
+            // التحقق من التوكن في الكوكيز
+            const cookieToken = getCookie('token');
+            log(cookieToken ? 'تم العثور على التوكن في الكوكيز' : 'لم يتم العثور على التوكن في الكوكيز');
+
+            // التحقق من التوكن في التخزين المحلي
+            const localToken = localStorage.getItem('token');
+            log(localToken ? 'تم العثور على التوكن في التخزين المحلي' : 'لم يتم العثور على التوكن في التخزين المحلي');
+
+            // إذا لم يتم العثور على التوكن في أي مكان
+            if (!cookieToken && !localToken) {
+                log('لم يتم العثور على التوكن في أي مكان', 'error');
+                redirectToLogin();
                 return;
             }
 
+            // استخدام التوكن من الكوكيز إذا كان موجوداً
+            const token = cookieToken || localToken;
+            log('جاري استخدام التوكن للتحقق...');
+
             try {
+                // التحقق من Firebase أولاً
+                const currentUser = auth.currentUser;
+                if (!currentUser) {
+                    log('المستخدم غير مسجل في Firebase', 'error');
+                    throw new Error('غير مصرح');
+                }
+                log(`مسجل في Firebase كـ: ${currentUser.email}`);
+
+                // التحقق من الخادم
+                log('جاري التحقق من التوكن مع الخادم...');
                 const response = await fetch('/api/auth/user', {
                     headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include' // مهم لإرسال الكوكيز
                 });
 
                 if (!response.ok) {
+                    log('فشل التحقق من التوكن مع الخادم', 'error');
                     throw new Error('غير مصرح');
                 }
 
                 const data = await response.json();
+                log(`تم التحقق بنجاح. مرحباً ${data.name}`);
                 document.getElementById('userName').textContent = data.name;
+
+                // تحديث التوكن
+                const newToken = await currentUser.getIdToken();
+                document.cookie = `token=${newToken}; path=/; max-age=86400; secure; samesite=strict`;
+                localStorage.setItem('token', newToken);
+                log('تم تحديث التوكن في الكوكيز والتخزين المحلي');
+
             } catch (error) {
-                console.error('خطأ في التحقق من المصادقة:', error);
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
+                log(`خطأ في التحقق: ${error.message}`, 'error');
+                clearAuthData();
+                redirectToLogin();
             }
+        }
+
+        // دالة تنظيف بيانات المصادقة
+        function clearAuthData() {
+            localStorage.removeItem('token');
+            document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            log('تم حذف بيانات المصادقة');
+        }
+
+        // دالة إعادة التوجيه لصفحة تسجيل الدخول
+        function redirectToLogin() {
+            log('جاري إعادة التوجيه إلى صفحة تسجيل الدخول...');
+            window.location.href = '/login.html';
         }
 
         // تسجيل الخروج
         async function logout() {
             try {
-                const token = localStorage.getItem('token');
-                await fetch('/api/auth/logout', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+                log('جاري تسجيل الخروج...');
+                const token = getCookie('token') || localStorage.getItem('token');
+                
+                if (token) {
+                    // تسجيل الخروج من الخادم
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include'
+                    });
+                    log('تم تسجيل الخروج من الخادم');
+                }
 
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
+                // تسجيل الخروج من Firebase
+                await auth.signOut();
+                log('تم تسجيل الخروج من Firebase');
+
+                clearAuthData();
+                redirectToLogin();
             } catch (error) {
-                console.error('خطأ في تسجيل الخروج:', error);
+                log(`خطأ في تسجيل الخروج: ${error.message}`, 'error');
+                // حتى لو فشل تسجيل الخروج من الخادم، نقوم بتنظيف البيانات المحلية
+                clearAuthData();
+                redirectToLogin();
             }
         }
 
         // التحقق عند تحميل الصفحة
-        document.addEventListener('DOMContentLoaded', checkAuth);
+        document.addEventListener('DOMContentLoaded', () => {
+            log('تم تحميل الصفحة');
+            checkAuth();
+        });
 
         // التحقق كل دقيقة
-        setInterval(checkAuth, 60000);
+        setInterval(() => {
+            log('تحقق دوري من المصادقة');
+            checkAuth();
+        }, 60000);
+
+        // الاستماع لتغييرات حالة المصادقة
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                log(`تم تسجيل الدخول كـ: ${user.email}`);
+            } else {
+                log('لم يتم تسجيل الدخول', 'warning');
+                clearAuthData();
+                redirectToLogin();
+            }
+        });
     </script>
 </head>
 <body>
