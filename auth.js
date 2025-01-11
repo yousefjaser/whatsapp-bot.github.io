@@ -340,4 +340,109 @@ router.put('/user', async (req, res) => {
     }
 });
 
+async function verifyAndRefreshToken(token) {
+    try {
+        console.log('التحقق من صلاحية التوكن:', token);
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        console.log('التوكن صالح:', decodedToken);
+        return { valid: true, uid: decodedToken.uid };
+    } catch (error) {
+        console.log('خطأ في التحقق من التوكن:', error.message);
+        // إذا كان التوكن غير صالح، نقوم بإنشاء توكن جديد
+        try {
+            const user = await admin.auth().getUser(error.uid);
+            const newToken = await admin.auth().createCustomToken(user.uid);
+            console.log('تم إنشاء توكن جديد:', newToken);
+            return { valid: false, newToken, uid: user.uid };
+        } catch (createError) {
+            console.log('خطأ في إنشاء توكن جديد:', createError.message);
+            return { valid: false, error: createError.message };
+        }
+    }
+}
+
+router.post('/api/auth/login', loginLimiter, async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        console.log('محاولة تسجيل الدخول:', email);
+
+        const userRecord = await auth.getUserByEmail(email);
+        const token = await auth.createCustomToken(userRecord.uid);
+        
+        // حفظ التوكن في الكوكيز
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000 // صلاحية لمدة يوم واحد
+        });
+
+        console.log('تم تسجيل الدخول بنجاح:', userRecord.uid);
+        res.json({ 
+            success: true, 
+            message: 'تم تسجيل الدخول بنجاح',
+            user: {
+                uid: userRecord.uid,
+                email: userRecord.email,
+                displayName: userRecord.displayName
+            }
+        });
+    } catch (error) {
+        console.error('خطأ في تسجيل الدخول:', error);
+        res.status(401).json({ 
+            success: false, 
+            message: 'فشل في تسجيل الدخول: ' + error.message 
+        });
+    }
+});
+
+router.get('/api/auth/user', async (req, res) => {
+    try {
+        const token = req.cookies.token || req.headers.authorization?.split('Bearer ')[1];
+        if (!token) {
+            throw new Error('لم يتم العثور على التوكن');
+        }
+
+        const tokenStatus = await verifyAndRefreshToken(token);
+        if (tokenStatus.valid) {
+            const user = await auth.getUser(tokenStatus.uid);
+            res.json({ 
+                success: true, 
+                user: {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: user.displayName
+                }
+            });
+        } else if (tokenStatus.newToken) {
+            // إذا تم إنشاء توكن جديد، نقوم بتحديثه في الكوكيز
+            res.cookie('token', tokenStatus.newToken, {
+                httpOnly: true,
+                secure: true,
+                sameSite: 'strict',
+                maxAge: 24 * 60 * 60 * 1000
+            });
+            
+            const user = await auth.getUser(tokenStatus.uid);
+            res.json({ 
+                success: true, 
+                user: {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: user.displayName
+                },
+                tokenRefreshed: true
+            });
+        } else {
+            throw new Error(tokenStatus.error || 'فشل في التحقق من التوكن');
+        }
+    } catch (error) {
+        console.error('خطأ في التحقق من المستخدم:', error);
+        res.status(401).json({ 
+            success: false, 
+            message: 'فشل في التحقق من المستخدم: ' + error.message 
+        });
+    }
+});
+
 module.exports = router; 
