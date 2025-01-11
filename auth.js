@@ -121,44 +121,43 @@ router.post('/login', loginLimiter, async (req, res) => {
         const { email, password } = req.body;
         console.log('محاولة تسجيل دخول:', email);
 
-        // التحقق من المستخدم
+        // التحقق من المستخدم في Firebase
         const userRecord = await auth.getUserByEmail(email);
         console.log('تم العثور على المستخدم:', userRecord.uid);
 
-        // إنشاء توكن Firebase
-        const customToken = await auth.createCustomToken(userRecord.uid);
+        // إنشاء توكن مباشرة من Firebase
+        const firebaseToken = await auth.createCustomToken(userRecord.uid);
         console.log('تم إنشاء توكن Firebase');
 
-        // إنشاء توكن JWT
-        const tokenData = {
-            uid: userRecord.uid,
-            email: userRecord.email,
-            name: userRecord.displayName,
-            firebaseToken: customToken,
-            timestamp: Date.now()
-        };
-
-        const token = jwt.sign(tokenData, process.env.JWT_SECRET, {
-            expiresIn: '24h',
-            algorithm: 'HS256'
-        });
+        // إنشاء توكن للجلسة
+        const sessionToken = jwt.sign(
+            {
+                uid: userRecord.uid,
+                email: userRecord.email,
+                name: userRecord.displayName,
+                loginTime: Date.now()
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
 
         // حفظ في الكوكيز
-        res.cookie('token', token, {
+        res.cookie('sessionToken', sessionToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/',
-            maxAge: 24 * 60 * 60 * 1000
+            maxAge: 7 * 24 * 60 * 60 * 1000 // صلاحية لمدة 7 أيام
         });
 
         // حفظ في قاعدة البيانات
         await db.collection('sessions').doc(userRecord.uid).set({
-            jwtToken: token,
-            firebaseToken: customToken,
+            sessionToken,
+            firebaseToken,
             lastLogin: admin.firestore.FieldValue.serverTimestamp(),
             userAgent: req.headers['user-agent'],
-            ipAddress: req.ip
+            ipAddress: req.ip,
+            isActive: true
         });
 
         res.json({
@@ -168,16 +167,15 @@ router.post('/login', loginLimiter, async (req, res) => {
                 email: userRecord.email,
                 displayName: userRecord.displayName
             },
-            firebaseToken: customToken,
-            redirect: '/home.html'
+            firebaseToken,
+            isAuthenticated: true
         });
 
     } catch (error) {
         console.error('خطأ في تسجيل الدخول:', error);
         res.status(401).json({
             success: false,
-            error: error.message,
-            shouldRetry: true
+            error: 'فشل في تسجيل الدخول: ' + error.message
         });
     }
 });
@@ -287,23 +285,37 @@ router.get('/user', async (req, res) => {
 // تسجيل الخروج
 router.post('/logout', async (req, res) => {
     try {
-        console.log('محاولة تسجيل الخروج');
-        res.clearCookie('token', {
+        const sessionToken = req.cookies.sessionToken;
+        if (sessionToken) {
+            try {
+                const decoded = jwt.verify(sessionToken, process.env.JWT_SECRET);
+                // تعطيل الجلسة في قاعدة البيانات
+                await db.collection('sessions').doc(decoded.uid).update({
+                    isActive: false,
+                    logoutTime: admin.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (error) {
+                console.error('خطأ في تعطيل الجلسة:', error);
+            }
+        }
+
+        // مسح الكوكيز
+        res.clearCookie('sessionToken', {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict'
+            sameSite: 'lax',
+            path: '/'
         });
-        console.log('تم حذف التوكن من الكوكيز');
-        
-        res.json({ 
-            success: true, 
-            message: 'تم تسجيل الخروج بنجاح' 
+
+        res.json({
+            success: true,
+            message: 'تم تسجيل الخروج بنجاح'
         });
     } catch (error) {
         console.error('خطأ في تسجيل الخروج:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: 'حدث خطأ أثناء تسجيل الخروج' 
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ أثناء تسجيل الخروج'
         });
     }
 });
@@ -473,6 +485,51 @@ router.get('/api/auth/user', async (req, res) => {
             error: error.message,
             shouldRetry: true
         });
+    }
+});
+
+// التحقق من حالة المستخدم
+router.get('/api/auth/check', async (req, res) => {
+    try {
+        const sessionToken = req.cookies.sessionToken;
+        if (!sessionToken) {
+            return res.json({ isAuthenticated: false });
+        }
+
+        // فك تشفير التوكن
+        const decoded = jwt.verify(sessionToken, process.env.JWT_SECRET);
+        
+        // التحقق من الجلسة في قاعدة البيانات
+        const sessionDoc = await db.collection('sessions')
+            .doc(decoded.uid)
+            .get();
+
+        if (!sessionDoc.exists || !sessionDoc.data().isActive) {
+            return res.json({ isAuthenticated: false });
+        }
+
+        const sessionData = sessionDoc.data();
+        if (sessionData.sessionToken !== sessionToken) {
+            return res.json({ isAuthenticated: false });
+        }
+
+        // تحديث وقت آخر نشاط
+        await db.collection('sessions').doc(decoded.uid).update({
+            lastActivity: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        res.json({
+            isAuthenticated: true,
+            user: {
+                uid: decoded.uid,
+                email: decoded.email,
+                name: decoded.name
+            }
+        });
+
+    } catch (error) {
+        console.error('خطأ في التحقق من حالة المستخدم:', error);
+        res.json({ isAuthenticated: false });
     }
 });
 
