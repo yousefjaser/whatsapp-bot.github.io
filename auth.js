@@ -119,97 +119,65 @@ router.post('/register', async (req, res) => {
 router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
-        console.log('بدء محاولة تسجيل الدخول للمستخدم:', email);
+        console.log('محاولة تسجيل دخول:', email);
 
-        if (!email || !password) {
-            console.error('بيانات غير مكتملة:', { email: !!email, password: !!password });
-            throw new Error('يرجى إدخال البريد الإلكتروني وكلمة المرور');
-        }
+        // التحقق من المستخدم
+        const userRecord = await auth.getUserByEmail(email);
+        console.log('تم العثور على المستخدم:', userRecord.uid);
 
-        // التحقق من المستخدم في Firebase
-        console.log('جاري البحث عن المستخدم في Firebase...');
-        const userRecord = await auth.getUserByEmail(email)
-            .catch(error => {
-                console.error('خطأ في البحث عن المستخدم:', {
-                    code: error.code,
-                    message: error.message
-                });
-                throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
-            });
+        // إنشاء توكن Firebase
+        const customToken = await auth.createCustomToken(userRecord.uid);
+        console.log('تم إنشاء توكن Firebase');
 
-        console.log('تم العثور على المستخدم:', {
+        // إنشاء توكن JWT
+        const tokenData = {
             uid: userRecord.uid,
             email: userRecord.email,
-            emailVerified: userRecord.emailVerified
+            name: userRecord.displayName,
+            firebaseToken: customToken,
+            timestamp: Date.now()
+        };
+
+        const token = jwt.sign(tokenData, process.env.JWT_SECRET, {
+            expiresIn: '24h',
+            algorithm: 'HS256'
         });
 
-        // التحقق من تأكيد البريد الإلكتروني
-        if (!userRecord.emailVerified) {
-            console.log('البريد الإلكتروني غير مؤكد:', email);
-            return res.status(400).json({ 
-                success: false, 
-                error: 'يرجى تأكيد بريدك الإلكتروني أولاً',
-                needsEmailVerification: true
-            });
-        }
+        // حفظ في الكوكيز
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 24 * 60 * 60 * 1000
+        });
 
-        try {
-            // إنشاء التوكن
-            console.log('جاري إنشاء التوكن...');
-            const tokenData = { 
-                uid: userRecord.uid, 
+        // حفظ في قاعدة البيانات
+        await db.collection('sessions').doc(userRecord.uid).set({
+            jwtToken: token,
+            firebaseToken: customToken,
+            lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+            userAgent: req.headers['user-agent'],
+            ipAddress: req.ip
+        });
+
+        res.json({
+            success: true,
+            user: {
+                uid: userRecord.uid,
                 email: userRecord.email,
-                name: userRecord.displayName 
-            };
-            
-            const token = jwt.sign(tokenData, process.env.JWT_SECRET, { expiresIn: '24h' });
-            console.log('تم إنشاء التوكن بنجاح');
-
-            // حفظ التوكن في الكوكيز
-            res.cookie('token', token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                path: '/',
-                maxAge: 24 * 60 * 60 * 1000
-            });
-            console.log('تم حفظ التوكن في الكوكيز');
-
-            // حفظ معلومات الجلسة
-            await db.collection('sessions').doc(userRecord.uid).set({
-                token,
-                lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-                userAgent: req.headers['user-agent'],
-                ipAddress: req.ip
-            });
-            console.log('تم حفظ معلومات الجلسة');
-
-            res.json({ 
-                success: true,
-                token,
-                user: {
-                    name: userRecord.displayName,
-                    email: userRecord.email,
-                    uid: userRecord.uid
-                },
-                redirect: '/home.html'
-            });
-            console.log('تم تسجيل الدخول بنجاح وإرسال الاستجابة');
-        } catch (tokenError) {
-            console.error('خطأ في إنشاء أو حفظ التوكن:', tokenError);
-            throw new Error('حدث خطأ أثناء إنشاء جلسة المستخدم');
-        }
-    } catch (error) {
-        console.error('خطأ في تسجيل الدخول:', {
-            message: error.message,
-            stack: error.stack,
-            originalError: error
+                displayName: userRecord.displayName
+            },
+            firebaseToken: customToken,
+            redirect: '/home.html'
         });
-        
-        res.status(401).json({ 
-            success: false, 
-            error: error.message || 'حدث خطأ أثناء تسجيل الدخول',
-            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+
+    } catch (error) {
+        console.error('خطأ في تسجيل الدخول:', error);
+        res.status(401).json({
+            success: false,
+            error: error.message,
+            shouldRetry: true
         });
     }
 });
@@ -369,50 +337,57 @@ async function verifyAndRefreshToken(token) {
     try {
         console.log('بدء عملية التحقق من التوكن:', token);
         
-        // محاولة فك تشفير التوكن أولاً
+        // محاولة فك تشفير التوكن
         let decoded;
         try {
             decoded = jwt.verify(token, process.env.JWT_SECRET);
-            console.log('تم فك تشفير التوكن بنجاح:', decoded);
+            console.log('تم فك تشفير التوكن JWT بنجاح:', decoded);
         } catch (jwtError) {
-            console.log('خطأ في فك تشفير التوكن، محاولة استخراج البيانات:', jwtError.message);
-            decoded = jwt.decode(token);
-            if (!decoded || !decoded.uid) {
-                throw new Error('توكن غير صالح أو تالف');
+            console.log('خطأ في فك تشفير JWT، محاولة التحقق من Firebase...');
+            try {
+                // محاولة التحقق من التوكن باستخدام Firebase
+                const decodedFirebase = await admin.auth().verifyIdToken(token);
+                console.log('تم التحقق من التوكن في Firebase:', decodedFirebase);
+                decoded = {
+                    uid: decodedFirebase.uid,
+                    email: decodedFirebase.email,
+                    name: decodedFirebase.name || ''
+                };
+            } catch (firebaseError) {
+                console.error('فشل التحقق من التوكن في Firebase:', firebaseError);
+                throw new Error('توكن غير صالح');
             }
         }
 
-        // التحقق من وجود المستخدم في Firebase
-        try {
-            console.log('التحقق من المستخدم في Firebase:', decoded.uid);
-            const userRecord = await auth.getUser(decoded.uid);
-            console.log('تم العثور على المستخدم:', userRecord.uid);
+        // التحقق من وجود المستخدم
+        console.log('جاري التحقق من المستخدم:', decoded.uid);
+        const userRecord = await auth.getUser(decoded.uid);
+        console.log('تم العثور على المستخدم:', userRecord.uid);
 
-            // إنشاء توكن جديد في جميع الحالات
-            const tokenData = {
-                uid: userRecord.uid,
-                email: userRecord.email,
-                name: userRecord.displayName,
-                timestamp: Date.now()
-            };
-            
-            const newToken = jwt.sign(tokenData, process.env.JWT_SECRET, { 
-                expiresIn: '24h',
-                algorithm: 'HS256'
-            });
-            
-            console.log('تم إنشاء توكن جديد');
-            
-            return {
-                valid: true,
-                newToken,
-                user: userRecord,
-                tokenData
-            };
-        } catch (firebaseError) {
-            console.error('خطأ في التحقق من المستخدم في Firebase:', firebaseError);
-            throw new Error('فشل في التحقق من المستخدم');
-        }
+        // إنشاء توكن جديد دائماً
+        const customToken = await auth.createCustomToken(userRecord.uid);
+        console.log('تم إنشاء توكن Firebase مخصص');
+
+        const tokenData = {
+            uid: userRecord.uid,
+            email: userRecord.email,
+            name: userRecord.displayName,
+            firebaseToken: customToken,
+            timestamp: Date.now()
+        };
+
+        const newJwtToken = jwt.sign(tokenData, process.env.JWT_SECRET, {
+            expiresIn: '24h',
+            algorithm: 'HS256'
+        });
+        console.log('تم إنشاء توكن JWT جديد');
+
+        return {
+            valid: true,
+            user: userRecord,
+            token: newJwtToken,
+            firebaseToken: customToken
+        };
     } catch (error) {
         console.error('خطأ في عملية التحقق:', error);
         throw error;
@@ -458,15 +433,13 @@ router.get('/api/auth/user', async (req, res) => {
     try {
         const token = req.cookies.token || req.headers.authorization?.split('Bearer ')[1];
         if (!token) {
-            console.log('لم يتم العثور على التوكن');
-            throw new Error('يرجى تسجيل الدخول');
+            throw new Error('لم يتم العثور على التوكن');
         }
 
-        console.log('بدء التحقق من التوكن');
         const result = await verifyAndRefreshToken(token);
         
-        // تحديث التوكن في الكوكيز دائماً
-        res.cookie('token', result.newToken, {
+        // تحديث الكوكيز
+        res.cookie('token', result.token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
@@ -474,15 +447,14 @@ router.get('/api/auth/user', async (req, res) => {
             maxAge: 24 * 60 * 60 * 1000
         });
 
-        // تحديث الجلسة في قاعدة البيانات
+        // تحديث الجلسة
         await db.collection('sessions').doc(result.user.uid).set({
-            token: result.newToken,
+            jwtToken: result.token,
+            firebaseToken: result.firebaseToken,
             lastAccess: admin.firestore.FieldValue.serverTimestamp(),
             userAgent: req.headers['user-agent'],
             ipAddress: req.ip
         });
-
-        console.log('تم تحديث الجلسة بنجاح');
 
         res.json({
             success: true,
@@ -491,12 +463,11 @@ router.get('/api/auth/user', async (req, res) => {
                 email: result.user.email,
                 displayName: result.user.displayName
             },
-            tokenRefreshed: true
+            firebaseToken: result.firebaseToken
         });
-        
+
     } catch (error) {
         console.error('خطأ في التحقق من المستخدم:', error);
-        // عدم مسح الكوكيز مباشرة، فقط إرسال رسالة الخطأ
         res.status(401).json({
             success: false,
             error: error.message,
