@@ -3,9 +3,20 @@ const express = require('express');
 const admin = require('firebase-admin');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 
 const auth = admin.auth();
 const db = admin.firestore();
+
+// حماية من محاولات تسجيل الدخول المتكررة
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 دقيقة
+    max: 5, // 5 محاولات كحد أقصى
+    message: { 
+        success: false,
+        error: 'تم تجاوز عدد محاولات تسجيل الدخول المسموح بها. الرجاء المحاولة بعد 15 دقيقة.'
+    }
+});
 
 // التسجيل
 router.post('/register', async (req, res) => {
@@ -46,7 +57,7 @@ router.post('/register', async (req, res) => {
 });
 
 // تسجيل الدخول
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -55,7 +66,7 @@ router.post('/login', async (req, res) => {
 
         // التحقق من تأكيد البريد الإلكتروني
         if (!userRecord.emailVerified) {
-            return res.status(400).json({ error: 'يرجى تأكيد بريدك الإلكتروني أولاً' });
+            return res.status(400).json({ success: false, error: 'يرجى تأكيد بريدك الإلكتروني أولاً' });
         }
 
         // إنشاء JWT token
@@ -72,10 +83,17 @@ router.post('/login', async (req, res) => {
             maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
         });
 
-        res.json({ token });
+        res.json({ 
+            success: true,
+            token,
+            redirect: '/home.html'
+        });
     } catch (error) {
         console.error('خطأ في تسجيل الدخول:', error);
-        res.status(401).json({ error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' });
+        res.status(401).json({ 
+            success: false, 
+            error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' 
+        });
     }
 });
 
@@ -121,6 +139,41 @@ router.get('/user', async (req, res) => {
     } catch (error) {
         console.error('خطأ في جلب معلومات المستخدم:', error);
         res.status(401).json({ error: 'غير مصرح' });
+    }
+});
+
+// تسجيل الخروج
+router.post('/logout', async (req, res) => {
+    try {
+        res.clearCookie('token');
+        res.json({ success: true, message: 'تم تسجيل الخروج بنجاح' });
+    } catch (error) {
+        console.error('خطأ في تسجيل الخروج:', error);
+        res.status(500).json({ success: false, error: 'حدث خطأ أثناء تسجيل الخروج' });
+    }
+});
+
+// تحديث معلومات المستخدم
+router.put('/user', async (req, res) => {
+    try {
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        if (!token) {
+            return res.status(401).json({ success: false, error: 'يجب تسجيل الدخول' });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const { name, password } = req.body;
+        
+        const updateData = {};
+        if (name) updateData.displayName = name;
+        if (password) updateData.password = password;
+
+        await auth.updateUser(decoded.uid, updateData);
+        
+        res.json({ success: true, message: 'تم تحديث المعلومات بنجاح' });
+    } catch (error) {
+        console.error('خطأ في تحديث معلومات المستخدم:', error);
+        res.status(500).json({ success: false, error: 'حدث خطأ أثناء تحديث المعلومات' });
     }
 });
 

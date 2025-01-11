@@ -117,6 +117,39 @@
             background-color: rgba(220, 53, 69, 0.1);
             color: var(--error-color);
         }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .remember-me input[type="checkbox"] {
+            width: auto;
+        }
+
+        .loader {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -135,7 +168,15 @@
                 <input type="password" id="password" required>
             </div>
             
-            <button type="submit">تسجيل الدخول</button>
+            <div class="form-group remember-me">
+                <input type="checkbox" id="remember" name="remember">
+                <label for="remember">تذكرني</label>
+            </div>
+            
+            <button type="submit" id="loginButton">
+                <span class="button-text">تسجيل الدخول</span>
+                <span class="loader" style="display: none;"></span>
+            </button>
         </form>
 
         <div class="links">
@@ -176,10 +217,20 @@
         async function login(event) {
             event.preventDefault();
             
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+            const loginButton = document.getElementById('loginButton');
+            const buttonText = loginButton.querySelector('.button-text');
+            const loader = loginButton.querySelector('.loader');
             
             try {
+                // تعطيل الزر وإظهار المؤشر
+                loginButton.disabled = true;
+                buttonText.style.display = 'none';
+                loader.style.display = 'inline-block';
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const remember = document.getElementById('remember').checked;
+                
                 // تسجيل الدخول باستخدام Firebase
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 const user = userCredential.user;
@@ -190,24 +241,17 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    credentials: 'include', // مهم لحفظ الكوكيز
-                    body: JSON.stringify({ email })
+                    credentials: 'include',
+                    body: JSON.stringify({ email, password, remember })
                 });
                 
                 const data = await response.json();
                 
-                if (data.success) {
-                    // حفظ التوكن في localStorage
+                if (response.ok && data.success) {
                     localStorage.setItem('token', data.token);
-                    document.cookie = `token=${data.token}; path=/; max-age=604800`; // 7 days
-                    
-                    // إضافة التوكن للرأس
-                    const authHeader = { Authorization: `Bearer ${data.token}` };
-                    
-                    // التوجيه إلى الصفحة المطلوبة
                     showMessage('تم تسجيل الدخول بنجاح!', 'success');
                     setTimeout(() => {
-                        window.location.href = data.redirect;
+                        window.location.href = data.redirect || '/home.html';
                     }, 1000);
                 } else {
                     showError(data.error || 'حدث خطأ أثناء تسجيل الدخول');
@@ -215,6 +259,11 @@
             } catch (error) {
                 console.error('خطأ في تسجيل الدخول:', error);
                 showError(error.message);
+            } finally {
+                // إعادة تفعيل الزر وإخفاء المؤشر
+                loginButton.disabled = false;
+                buttonText.style.display = 'inline';
+                loader.style.display = 'none';
             }
         }
 
