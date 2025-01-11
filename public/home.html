@@ -13,6 +13,7 @@
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
+            font-family: monospace;
             display: none;
         }
         .log-info { color: #0066cc; }
@@ -36,66 +37,83 @@
             logContainer.scrollTop = logContainer.scrollHeight;
         }
 
-        // التحقق من حالة المصادقة عند تحميل الصفحة
-        async function checkAuth() {
+        // التحقق من الجلسة
+        async function checkSession() {
             try {
-                const response = await fetch('/api/auth/check');
+                log('جاري التحقق من الجلسة...');
+                
+                const response = await fetch('/api/auth/check', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`خطأ في الاتصال: ${response.status}`);
+                }
+
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('استجابة غير صالحة من الخادم');
+                }
+
                 const data = await response.json();
                 
                 if (!data.isAuthenticated) {
-                    log('جلسة غير صالحة، جاري إعادة التوجيه...', 'warning');
-                    setTimeout(() => {
-                        window.location.href = '/login.html';
-                    }, 1000);
+                    log('الجلسة غير صالحة، جاري إعادة التوجيه...', 'warning');
+                    window.location.href = '/login.html';
                     return;
                 }
 
-                // تحديث معلومات المستخدم
-                const userInfo = document.getElementById('userInfo');
-                userInfo.innerHTML = `
-                    <h2>مرحباً ${data.user.name}</h2>
-                    <p>البريد الإلكتروني: ${data.user.email}</p>
-                `;
-
-                log('تم التحقق من الجلسة بنجاح', 'info');
+                log('تم التحقق من الجلسة بنجاح');
+                document.getElementById('userInfo').textContent = `مرحباً ${data.user.email}`;
             } catch (error) {
                 log('خطأ في التحقق من الجلسة: ' + error.message, 'error');
+                setTimeout(() => {
+                    window.location.href = '/login.html';
+                }, 3000);
             }
         }
 
         // تسجيل الخروج
         async function logout() {
             try {
-                const response = await fetch('/logout', {
+                log('جاري تسجيل الخروج...');
+                
+                const response = await fetch('/api/auth/logout', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
-                    }
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include'
                 });
+
+                if (!response.ok) {
+                    throw new Error(`خطأ في الاتصال: ${response.status}`);
+                }
+
                 const data = await response.json();
                 
                 if (data.success) {
-                    log('تم تسجيل الخروج بنجاح', 'info');
-                    setTimeout(() => {
-                        window.location.href = '/login.html';
-                    }, 1000);
-                } else {
-                    throw new Error(data.error);
+                    log('تم تسجيل الخروج بنجاح');
+                    window.location.href = '/login.html';
                 }
             } catch (error) {
                 log('خطأ في تسجيل الخروج: ' + error.message, 'error');
             }
         }
 
-        // التحقق من الجلسة عند تحميل الصفحة
+        // التحقق عند تحميل الصفحة
         window.onload = function() {
             document.getElementById('logContainer').style.display = 'block';
-            log('جاري التحقق من الجلسة...', 'info');
-            checkAuth();
+            checkSession();
+            // التحقق الدوري من الجلسة
+            setInterval(checkSession, 60000); // كل دقيقة
         };
-
-        // التحقق الدوري من الجلسة
-        setInterval(checkAuth, 5 * 60 * 1000); // كل 5 دقائق
     </script>
 </body>
 </html> 
