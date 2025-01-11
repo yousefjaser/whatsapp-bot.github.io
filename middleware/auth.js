@@ -12,13 +12,15 @@ const validateSession = async (req, res, next) => {
             });
         }
 
-        // التحقق من وجود المستخدم في Firebase
+        // التحقق من وجود المستخدم في Firestore
         const userDoc = await admin.firestore()
             .collection('users')
             .doc(req.session.userId)
             .get();
 
         if (!userDoc.exists) {
+            // إذا لم يتم العثور على المستخدم، قم بإنهاء الجلسة
+            req.session.destroy();
             return res.status(401).json({
                 success: false,
                 error: 'غير مصرح بالوصول',
@@ -31,6 +33,11 @@ const validateSession = async (req, res, next) => {
             id: userDoc.id,
             ...userDoc.data()
         };
+
+        // تحديث وقت آخر نشاط
+        await userDoc.ref.update({
+            lastActivity: admin.firestore.FieldValue.serverTimestamp()
+        });
 
         next();
     } catch (error) {

@@ -36,9 +36,32 @@ app.use(session({
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
+        sameSite: 'strict',
         maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
-    }
+    },
+    name: 'sessionId' // تغيير اسم الكوكي
 }));
+
+// التحقق من المصادقة لجميع المسارات المحمية
+app.use('/api/devices', (req, res, next) => {
+    if (!req.session.userId) {
+        return res.status(401).json({
+            success: false,
+            error: 'غير مصرح بالوصول'
+        });
+    }
+    next();
+});
+
+app.use('/api/whatsapp', (req, res, next) => {
+    if (!req.session.userId) {
+        return res.status(401).json({
+            success: false,
+            error: 'غير مصرح بالوصول'
+        });
+    }
+    next();
+});
 
 // تضمين المسارات
 const authRoutes = require('./routes/auth');
