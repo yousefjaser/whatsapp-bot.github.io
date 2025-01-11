@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot - إدارة الأجهزة</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .navbar {
+            background-color: #25D366;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .navbar-brand, .nav-link {
+            color: white !important;
+        }
+        .main-container {
+            padding: 40px 20px;
+        }
+        .device-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .qr-code {
+            max-width: 300px;
+            margin: auto;
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+        }
+        .status-connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .btn-whatsapp {
+            background-color: #25D366;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 5px;
+        }
+        .btn-whatsapp:hover {
+            background-color: #128C7E;
+            color: white;
+        }
+        .error-message {
+            display: none;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #f8d7da;
+            color: #842029;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- شريط التنقل -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand" href="/">WhatsApp Bot</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">الرئيسية</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/devices.html">الأجهزة</a>
+                    </li>
+                </ul>
+                <div class="d-flex">
+                    <span class="nav-link" id="userEmail"></span>
+                    <button class="btn btn-outline-light ms-2" onclick="logout()">تسجيل الخروج</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container main-container">
+        <h2 class="mb-4">إدارة الأجهزة</h2>
+        
+        <!-- زر إضافة جهاز جديد -->
+        <button class="btn btn-whatsapp mb-4" onclick="addNewDevice()">
+            <i class="fas fa-plus"></i> إضافة جهاز جديد
+        </button>
+
+        <!-- قائمة الأجهزة -->
+        <div id="devicesList">
+            <!-- سيتم ملؤها بواسطة JavaScript -->
+        </div>
+
+        <!-- نافذة QR Code -->
+        <div class="modal fade" id="qrModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">مسح رمز QR</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="qr-container">
+                            <img id="qrCode" class="qr-code" src="" alt="QR Code">
+                            <p class="mt-3">افتح WhatsApp على هاتفك وامسح الرمز</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- رسائل الخطأ -->
+        <div id="errorMessage" class="error-message"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://kit.fontawesome.com/your-font-awesome-kit.js"></script>
+    <script>
+        let qrCheckInterval;
+        const modal = new bootstrap.Modal(document.getElementById('qrModal'));
+
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check', {
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل التحقق من الجلسة');
+                }
+
+                const data = await response.json();
+                document.getElementById('userEmail').textContent = data.email;
+                loadDevices();
+            } catch (error) {
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.textContent = error.message;
+                errorMessage.style.display = 'block';
+                setTimeout(() => {
+                    window.location.href = '/login.html';
+                }, 3000);
+            }
+        }
+
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices', {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل تحميل الأجهزة');
+                }
+
+                const devices = await response.json();
+                const devicesList = document.getElementById('devicesList');
+                devicesList.innerHTML = '';
+
+                devices.forEach(device => {
+                    const deviceElement = createDeviceElement(device);
+                    devicesList.appendChild(deviceElement);
+                });
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function createDeviceElement(device) {
+            const div = document.createElement('div');
+            div.className = 'device-card';
+            div.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5>${device.name || 'جهاز جديد'}</h5>
+                        <span class="status-badge ${device.connected ? 'status-connected' : 'status-disconnected'}">
+                            ${device.connected ? 'متصل' : 'غير متصل'}
+                        </span>
+                    </div>
+                    <div>
+                        <button class="btn btn-whatsapp me-2" onclick="reconnectDevice('${device.id}')">
+                            إعادة الاتصال
+                        </button>
+                        <button class="btn btn-danger" onclick="deleteDevice('${device.id}')">
+                            حذف
+                        </button>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        async function addNewDevice() {
+            try {
+                const response = await fetch('/api/devices/new', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل إضافة جهاز جديد');
+                }
+
+                const data = await response.json();
+                document.getElementById('qrCode').src = data.qr;
+                modal.show();
+                
+                // بدء التحقق من حالة QR
+                startQRCheck(data.deviceId);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function startQRCheck(deviceId) {
+            clearInterval(qrCheckInterval);
+            qrCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/devices/${deviceId}/status`, {
+                        credentials: 'include'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('فشل التحقق من حالة الجهاز');
+                    }
+
+                    const data = await response.json();
+                    if (data.connected) {
+                        clearInterval(qrCheckInterval);
+                        modal.hide();
+                        loadDevices();
+                    }
+                } catch (error) {
+                    showError(error.message);
+                    clearInterval(qrCheckInterval);
+                }
+            }, 3000);
+        }
+
+        async function reconnectDevice(deviceId) {
+            try {
+                const response = await fetch(`/api/devices/${deviceId}/reconnect`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل إعادة الاتصال بالجهاز');
+                }
+
+                const data = await response.json();
+                document.getElementById('qrCode').src = data.qr;
+                modal.show();
+                startQRCheck(deviceId);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function deleteDevice(deviceId) {
+            if (!confirm('هل أنت متأكد من حذف هذا الجهاز؟')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/devices/${deviceId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل حذف الجهاز');
+                }
+
+                loadDevices();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function logout() {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل تسجيل الخروج');
+                }
+
+                window.location.href = '/login.html';
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        // التحقق من الجلسة عند تحميل الصفحة
+        window.addEventListener('load', checkAuth);
+
+        // تنظيف عند إغلاق النافذة
+        window.addEventListener('beforeunload', () => {
+            clearInterval(qrCheckInterval);
+        });
+    </script>
+</body>
+</html> 

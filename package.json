@@ -16,9 +16,11 @@
     "dotenv": "16.3.1",
     "express": "4.18.2",
     "express-rate-limit": "7.1.5",
-    "firebase-admin": "11.11.1",
+    "express-session": "1.17.3",
+    "firebase-admin": "12.0.0",
     "jsonwebtoken": "9.0.2",
-    "socket.io": "4.7.2"
+    "qrcode": "1.5.3",
+    "whatsapp-web.js": "1.23.0"
   },
   "devDependencies": {
     "nodemon": "3.0.2"

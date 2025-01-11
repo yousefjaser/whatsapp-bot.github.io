@@ -1,68 +1,67 @@
 require('dotenv').config();
 const express = require('express');
+const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const path = require('path');
-const authRoutes = require('./auth');
+const admin = require('firebase-admin');
+const dotenv = require('dotenv');
+
+// تحميل متغيرات البيئة
+dotenv.config();
+
+// تهيئة Firebase Admin
+const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+admin.initializeApp({
+    credential: admin.credential.cert(firebaseConfig)
+});
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const port = process.env.PORT || 3001;
 
-// Middleware
-app.use(express.json());
-app.use(cookieParser());
-
-// إعدادات CORS
+// إعداد CORS
 app.use(cors({
-    origin: process.env.BASE_URL ? `https://${process.env.BASE_URL}` : 'http://localhost:3001',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+    origin: process.env.BASE_URL || 'http://localhost:3001',
+    credentials: true
 }));
 
-// تعيين الهيدرز الأمنية
-app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    next();
-});
-
-// تعيين نوع المحتوى للمسارات API فقط
-app.use('/api', (req, res, next) => {
-    res.setHeader('Content-Type', 'application/json');
-    next();
-});
-
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Routes
-app.use('/api/auth', authRoutes);
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error('خطأ:', err);
-    res.status(500).json({
-        success: false,
-        error: 'حدث خطأ في الخادم'
-    });
-});
-
-// Handle 404
-app.use((req, res) => {
-    if (req.path.startsWith('/api/')) {
-        return res.status(404).json({
-            success: false,
-            error: 'المسار غير موجود'
-        });
+// الوسائط
+app.use(express.json());
+app.use(cookieParser());
+app.use(session({
+    secret: process.env.JWT_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
     }
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+}));
+
+// تضمين المسارات
+const authRoutes = require('./routes/auth');
+const devicesRoutes = require('./routes/devices');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/devices', devicesRoutes);
+
+// تقديم الملفات الثابتة
+app.use(express.static('public'));
+
+// معالجة الصفحات غير الموجودة
+app.use((req, res) => {
+    res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+});
+
+// معالجة الأخطاء
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'حدث خطأ في الخادم' });
 });
 
 // بدء الخادم
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`الخادم يعمل على المنفذ ${PORT}`);
-    console.log(`عنوان الموقع: ${process.env.BASE_URL || 'http://localhost:' + PORT}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`الخادم يعمل على المنفذ ${port}`);
+    console.log(`عنوان الموقع: ${process.env.BASE_URL || `http://localhost:${port}`}`);
 }); 
