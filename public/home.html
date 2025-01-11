@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم - واتساب بوت</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .navbar {
+            background: var(--primary-color);
+            padding: 1rem;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .navbar-brand img {
+            width: 40px;
+            height: 40px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .dashboard-card {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            color: var(--primary-color);
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e8f5e9;
+            border-radius: 12px;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--secondary-color);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .btn-outline:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-item {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .welcome-banner {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 2rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .welcome-text {
+            flex: 1;
+        }
+
+        .welcome-image {
+            width: 200px;
+            height: 200px;
+            object-fit: contain;
+        }
+
+        @media (max-width: 768px) {
+            .welcome-banner {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .welcome-image {
+                margin-top: 1rem;
+                width: 150px;
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/1200px-WhatsApp.svg.png" alt="واتساب بوت">
+            واتساب بوت
+        </div>
+        <div class="user-info">
+            <div class="user-avatar">
+                <i class="fas fa-user"></i>
+            </div>
+            <span id="userName">...</span>
+            <button class="btn btn-outline" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i>
+                تسجيل الخروج
+            </button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="welcome-banner">
+            <div class="welcome-text">
+                <h1>مرحباً بك في لوحة التحكم</h1>
+                <p>يمكنك إدارة أجهزتك وإرسال الرسائل بكل سهولة</p>
+            </div>
+            <img src="https://cdn-icons-png.flaticon.com/512/1041/1041916.png" alt="ترحيب" class="welcome-image">
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-mobile-alt"></i>
+                    </div>
+                    <h2 class="card-title">إدارة الأجهزة</h2>
+                </div>
+                <p>قم بإضافة وإدارة أجهزة واتساب المتصلة</p>
+                <button class="btn btn-primary" onclick="window.location.href='/send'">
+                    <i class="fas fa-plus"></i>
+                    إضافة جهاز جديد
+                </button>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <h2 class="card-title">مفاتيح API</h2>
+                </div>
+                <p>قم بإدارة مفاتيح API للوصول البرمجي</p>
+                <button class="btn btn-primary" onclick="window.location.href='/api-dashboard'">
+                    <i class="fas fa-cog"></i>
+                    إدارة المفاتيح
+                </button>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-book"></i>
+                    </div>
+                    <h2 class="card-title">التوثيق</h2>
+                </div>
+                <p>اطلع على دليل استخدام API</p>
+                <button class="btn btn-primary" onclick="window.location.href='/docs'">
+                    <i class="fas fa-external-link-alt"></i>
+                    عرض التوثيق
+                </button>
+            </div>
+        </div>
+
+        <div class="dashboard-card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <div class="card-icon">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <h2 class="card-title">إحصائيات عامة</h2>
+            </div>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="devicesCount">0</div>
+                    <div class="stat-label">الأجهزة المتصلة</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="messagesCount">0</div>
+                    <div class="stat-label">الرسائل المرسلة</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="apiKeysCount">0</div>
+                    <div class="stat-label">مفاتيح API</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const profileContainer = document.getElementById('profileContainer');
+        const profileMenu = document.getElementById('profileMenu');
+        const profileImage = document.getElementById('profileImage');
+        const userName = document.getElementById('userName');
+        const userEmail = document.getElementById('userEmail');
+
+        // التحقق من وجود التوكن عند تحميل الصفحة
+        window.addEventListener('load', async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            try {
+                // جلب معلومات المستخدم من Firebase
+                const response = await fetch('/api/auth/user', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('فشل في جلب معلومات المستخدم');
+                }
+
+                const userData = await response.json();
+                
+                // تحديث معلومات المستخدم في الواجهة
+                userName.textContent = userData.name || 'المستخدم';
+                userEmail.textContent = userData.email;
+                profileImage.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}&background=128C7E&color=fff`;
+
+                // إظهار زر إضافة المسؤول إذا كان المستخدم هو المالك
+                if (userData.email === 'yousefjaser2020@gmail.com') {
+                    document.getElementById('addAdminButton').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+                // حذف التوكن وتوجيه المستخدم لصفحة تسجيل الدخول
+                localStorage.removeItem('token');
+                document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                window.location.href = '/login.html';
+            }
+        });
+
+        // إظهار/إخفاء قائمة الملف الشخصي
+        profileContainer.addEventListener('click', (e) => {
+            e.stopPropagation();
+            profileMenu.classList.toggle('show');
+        });
+
+        // إخفاء القائمة عند النقر خارجها
+        document.addEventListener('click', () => {
+            profileMenu.classList.remove('show');
+        });
+
+        // دالة تسجيل الخروج
+        async function logout() {
+            try {
+                const token = localStorage.getItem('token');
+                if (token) {
+                    // حذف التوكن من localStorage والكوكيز
+                    localStorage.removeItem('token');
+                    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                }
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('خطأ في تسجيل الخروج:', error);
+            }
+        }
+
+        // دالة لإظهار مربع حوار إضافة مسؤول
+        function showAddAdminDialog() {
+            const email = prompt("أدخل البريد الإلكتروني للمسؤول الجديد:");
+            if (email) {
+                addAdmin(email);
+            }
+        }
+
+        // دالة لإضافة مسؤول جديد
+        async function addAdmin(email) {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/owner/admins', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email })
+                });
+
+                if (!response.ok) {
+                    throw new Error('فشل في إضافة المسؤول');
+                }
+
+                alert('تمت إضافة المسؤول بنجاح!');
+            } catch (error) {
+                console.error('خطأ:', error);
+                alert('حدث خطأ في إضافة المسؤول');
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إرسال رسالة - واتساب بوت</title>
+    <style>
+        :root {
+            --primary-color: #128C7E;
+            --secondary-color: #075E54;
+            --success-color: #25D366;
+            --error-color: #DC3545;
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .devices-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .devices-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .devices-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .device-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .device-card.connected {
+            border-right: 4px solid var(--success-color);
+        }
+
+        .device-card.disconnected {
+            border-right: 4px solid var(--error-color);
+        }
+
+        .device-name {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .device-status {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .device-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-danger {
+            background-color: var(--error-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+
+        .message-form {
+            margin-top: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .phone-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .phone-input select {
+            width: 150px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .qr-code {
+            max-width: 300px;
+            margin: 0 auto;
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+            display: none;
+        }
+
+        .success {
+            background-color: rgba(37, 211, 102, 0.1);
+            color: var(--success-color);
+        }
+
+        .error {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--error-color);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .qr-code {
+            max-width: 300px;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        .qr-instructions {
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+        }
+        
+        .error {
+            color: var(--error-color);
+            text-align: center;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>إرسال رسالة واتساب</h1>
+        
+        <div id="message" class="message"></div>
+
+        <div class="devices-section">
+            <div class="devices-header">
+                <h2>الأجهزة المتصلة</h2>
+                <button id="addDeviceBtn" class="btn btn-primary" onclick="showAddDeviceModal()">إضافة جهاز جديد</button>
+            </div>
+            <div id="devicesList" class="devices-list">
+                <!-- سيتم تعبئة هذا القسم بواسطة JavaScript -->
+            </div>
+        </div>
+
+        <form id="messageForm" class="message-form">
+            <div class="form-group">
+                <label for="deviceSelect">اختر الجهاز</label>
+                <select id="deviceSelect" required>
+                    <option value="">اختر جهازاً</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="name">الاسم</label>
+                <input type="text" id="name" required>
+            </div>
+
+            <div class="form-group">
+                <label for="phone">رقم الهاتف</label>
+                <div class="phone-input">
+                    <select id="countryCode" required>
+                        <!-- سيتم تعبئة هذا القسم من ملف countries.js -->
+                    </select>
+                    <input type="tel" id="phone" required placeholder="رقم الهاتف بدون رمز الدولة">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="message">الرسالة</label>
+                <textarea id="message" rows="4" required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">إرسال الرسالة</button>
+        </form>
+    </div>
+
+    <!-- Modal لإضافة جهاز جديد -->
+    <div id="addDeviceModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>إضافة جهاز جديد</h2>
+                <button class="close-btn" onclick="hideAddDeviceModal()">&times;</button>
+            </div>
+            <form id="addDeviceForm">
+                <div class="form-group">
+                    <label for="deviceName">اسم الجهاز</label>
+                    <input type="text" id="deviceName" required>
+                </div>
+                <div id="qrContainer" class="qr-container">
+                    <!-- سيتم عرض رمز QR هنا -->
+                </div>
+                <button type="submit" class="btn btn-primary">إضافة الجهاز</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="countries.js"></script>
+    <script>
+        const socket = io({
+            auth: {
+                token: localStorage.getItem('token')
+            }
+        });
+
+        const devicesList = document.getElementById('devicesList');
+        const deviceSelect = document.getElementById('deviceSelect');
+        const countryCodeSelect = document.getElementById('countryCode');
+        const messageForm = document.getElementById('messageForm');
+        const addDeviceForm = document.getElementById('addDeviceForm');
+        const addDeviceModal = document.getElementById('addDeviceModal');
+        const messageDiv = document.getElementById('message');
+
+        // تحميل قائمة الدول
+        if (typeof countries !== 'undefined') {
+            countries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country.code;
+                option.textContent = `${country.flag} ${country.name} (${country.code})`;
+                countryCodeSelect.appendChild(option);
+            });
+        }
+
+        function showMessage(text, type) {
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = 'block';
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function updateDevicesList(devices) {
+            devicesList.innerHTML = '';
+            deviceSelect.innerHTML = '<option value="">اختر جهازاً</option>';
+
+            devices.forEach(device => {
+                // إضافة بطاقة الجهاز
+                const deviceCard = document.createElement('div');
+                deviceCard.className = `device-card ${device.isConnected ? 'connected' : 'disconnected'}`;
+                deviceCard.innerHTML = `
+                    <div class="device-name">${device.name}</div>
+                    <div class="device-status">الحالة: ${device.isConnected ? 'متصل' : 'غير متصل'}</div>
+                    <div class="device-actions">
+                        <button class="btn btn-primary" onclick="showQRCode('${device.id}')" ${device.isConnected ? 'disabled' : ''}>
+                            عرض QR
+                        </button>
+                        <button class="btn btn-danger" onclick="disconnectDevice('${device.id}')">
+                            قطع الاتصال
+                        </button>
+                    </div>
+                `;
+                devicesList.appendChild(deviceCard);
+
+                // إضافة الجهاز إلى قائمة الاختيار
+                if (device.isConnected) {
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.textContent = device.name;
+                    deviceSelect.appendChild(option);
+                }
+            });
+        }
+
+        function showAddDeviceModal() {
+            const modal = document.getElementById('addDeviceModal');
+            modal.classList.add('show');
+            // إرسال طلب إضافة جهاز جديد
+            socket.emit('initDevice');
+        }
+
+        function hideAddDeviceModal() {
+            addDeviceModal.classList.remove('show');
+            document.getElementById('qrContainer').innerHTML = '';
+        }
+
+        addDeviceForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const deviceName = document.getElementById('deviceName').value;
+            socket.emit('addDevice', { name: deviceName });
+        });
+
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                deviceId: deviceSelect.value,
+                name: document.getElementById('name').value,
+                countryCode: countryCodeSelect.value,
+                phone: document.getElementById('phone').value,
+                message: document.getElementById('message').value
+            };
+
+            socket.emit('sendMessage', data);
+        });
+
+        function disconnectDevice(deviceId) {
+            if (confirm('هل أنت متأكد من قطع اتصال هذا الجهاز؟')) {
+                socket.emit('disconnectDevice', deviceId);
+            }
+        }
+
+        // Socket.IO Event Listeners
+        socket.on('devicesList', (devices) => {
+            updateDevicesList(devices);
+        });
+
+        socket.on('deviceAdded', (device) => {
+            showMessage('تم إضافة الجهاز بنجاح', 'success');
+            hideAddDeviceModal();
+        });
+
+        function showQRCode(deviceId) {
+            const modal = document.getElementById('addDeviceModal');
+            const qrContainer = document.getElementById('qrContainer');
+            modal.classList.add('show');
+            qrContainer.innerHTML = '<div class="loading">جاري تحميل رمز QR...</div>';
+            
+            // إعادة تهيئة الجهاز للحصول على رمز QR جديد
+            socket.emit('initDevice', { deviceId });
+        }
+
+        // تحديث مستمعي الأحداث لـ Socket.IO
+        socket.on('qr', (deviceId, qrCode) => {
+            const qrContainer = document.getElementById('qrContainer');
+            if (qrContainer) {
+                qrContainer.innerHTML = `<img src="${qrCode}" alt="QR Code" class="qr-code">
+                    <p class="qr-instructions">امسح رمز QR باستخدام تطبيق واتساب على هاتفك</p>`;
+            }
+        });
+
+        socket.on('deviceConnected', (deviceId) => {
+            hideAddDeviceModal();
+            showMessage('تم الاتصال بالجهاز بنجاح', 'success');
+            // تحديث قائمة الأجهزة
+            socket.emit('getDevices');
+        });
+
+        socket.on('error', (error) => {
+            showMessage(error, 'error');
+            const qrContainer = document.getElementById('qrContainer');
+            if (qrContainer) {
+                qrContainer.innerHTML = `<p class="error">حدث خطأ: ${error}</p>`;
+            }
+        });
+
+        // التحقق من وجود التوكن عند تحميل الصفحة
+        window.addEventListener('load', () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            // تهيئة Socket.IO
+            socket = io({
+                auth: { token }
+            });
+
+            // إعداد مستمعي الأحداث
+            socket.on('connect', () => {
+                console.log('تم الاتصال بالخادم');
+                // طلب قائمة الأجهزة عند الاتصال
+                socket.emit('getDevices');
+            });
+
+            socket.on('devicesList', (devices) => {
+                updateDevicesList(devices);
+            });
+
+            socket.on('error', (error) => {
+                showMessage(error, 'error');
+            });
+        });
+    </script>
+</body>
+</html> 

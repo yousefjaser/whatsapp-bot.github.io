@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #25D366;
+            --secondary-color: #128C7E;
+            --dark-color: #075E54;
+            --light-color: #DCF8C6;
+            --error-color: #DC3545;
+            --success-color: #198754;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .device-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+            margin-bottom: 1rem;
+        }
+
+        .device-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .status-connected {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .status-disconnected {
+            background-color: var(--error-color);
+            color: white;
+        }
+
+        .btn-whatsapp {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 0.5rem 1.5rem;
+            transition: background-color 0.2s;
+        }
+
+        .btn-whatsapp:hover {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .message-history {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .tutorial-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9998;
+        }
+
+        .tutorial-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .device-card {
+                margin: 0.5rem 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <div class="tutorial-overlay">
+        <div class="tutorial-content">
+            <h3>مرحباً بك في WhatsApp Bot!</h3>
+            <p>دليل سريع لاستخدام التطبيق:</p>
+            <ol class="text-start">
+                <li>أضف جهازاً جديداً باستخدام زر "إضافة جهاز"</li>
+                <li>امسح رمز QR باستخدام تطبيق WhatsApp على هاتفك</li>
+                <li>بمجرد الاتصال، يمكنك إرسال الرسائل إلى أي رقم</li>
+            </ol>
+            <button class="btn btn-whatsapp" onclick="closeTutorial()">فهمت!</button>
+        </div>
+    </div>
+
+    <div class="container py-4">
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="text-center mb-4">WhatsApp Bot</h1>
+                <div class="d-flex justify-content-between align-items-center">
+                    <button class="btn btn-whatsapp" onclick="addDevice()">
+                        <i class="fas fa-plus"></i> إضافة جهاز
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="showTutorial()">
+                        <i class="fas fa-question-circle"></i> مساعدة
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div id="devices-container" class="mb-4"></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">سجل الرسائل</h5>
+                    </div>
+                    <div class="card-body message-history" id="message-history">
+                        <!-- سيتم ملء هذا القسم ديناميكياً -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal إضافة جهاز -->
+    <div class="modal fade" id="deviceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">إضافة جهاز جديد</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">اسم الجهاز</label>
+                        <input type="text" class="form-control" id="deviceName">
+                    </div>
+                    <div id="qrCode" class="text-center"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal إرسال رسالة -->
+    <div class="modal fade" id="messageModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">إرسال رسالة</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">اسم المستلم</label>
+                        <input type="text" class="form-control" id="recipientName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">رقم الهاتف</label>
+                        <div class="input-group">
+                            <select class="form-select" id="countryCode" style="width: 30%;">
+                                <!-- سيتم ملء هذا القسم ديناميكياً -->
+                            </select>
+                            <input type="text" class="form-control" id="phoneNumber">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الرسالة</label>
+                        <textarea class="form-control" id="messageText" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-whatsapp" onclick="sendMessage()">إرسال</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client/dist/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="https://kit.fontawesome.com/your-fontawesome-kit.js"></script>
+    <script src="public/countries.js"></script>
+    <script>
+        let socket;
+        let currentDeviceId;
+        const deviceModal = new bootstrap.Modal(document.getElementById('deviceModal'));
+        const messageModal = new bootstrap.Modal(document.getElementById('messageModal'));
+        const loadingOverlay = document.querySelector('.loading-overlay');
+
+        // التحقق من المستخدم الجديد
+        if (!localStorage.getItem('tutorialSeen')) {
+            showTutorial();
+        }
+
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+        }
+
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
+
+        function showNotification(message, type = 'success') {
+            Toastify({
+                text: message,
+                duration: 3000,
+                gravity: "top",
+                position: 'center',
+                backgroundColor: type === 'success' ? 'var(--success-color)' : 'var(--error-color)'
+            }).showToast();
+        }
+
+        function showTutorial() {
+            document.querySelector('.tutorial-overlay').style.display = 'flex';
+        }
+
+        function closeTutorial() {
+            document.querySelector('.tutorial-overlay').style.display = 'none';
+            localStorage.setItem('tutorialSeen', 'true');
+        }
+
+        function initializeSocket() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            socket = io({
+                auth: { token }
+            });
+
+            socket.on('connect', () => {
+                showNotification('تم الاتصال بالخادم بنجاح');
+            });
+
+            socket.on('devicesList', (devices) => {
+                updateDevicesList(devices);
+            });
+
+            socket.on('deviceQR', (deviceId, qrCode) => {
+                document.getElementById('qrCode').innerHTML = `<img src="${qrCode}" class="img-fluid">`;
+            });
+
+            socket.on('deviceConnected', (deviceId) => {
+                showNotification('تم الاتصال بالجهاز بنجاح');
+                deviceModal.hide();
+                refreshDevices();
+            });
+
+            socket.on('deviceDisconnected', (deviceId) => {
+                showNotification('تم قطع الاتصال بالجهاز', 'error');
+                refreshDevices();
+            });
+
+            socket.on('messageSent', (response) => {
+                hideLoading();
+                messageModal.hide();
+                showNotification(response);
+                refreshMessageHistory();
+            });
+
+            socket.on('error', (error) => {
+                hideLoading();
+                showNotification(error, 'error');
+            });
+        }
+
+        function updateDevicesList(devices) {
+            const container = document.getElementById('devices-container');
+            container.innerHTML = devices.map(device => `
+                <div class="device-card p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-2">${device.name}</h5>
+                            <span class="status-badge ${device.isConnected ? 'status-connected' : 'status-disconnected'}">
+                                ${device.isConnected ? 'متصل' : 'غير متصل'}
+                            </span>
+                        </div>
+                        <div>
+                            ${device.isConnected ? `
+                                <button class="btn btn-whatsapp me-2" onclick="showMessageModal('${device.id}')">
+                                    <i class="fas fa-paper-plane"></i> إرسال رسالة
+                                </button>
+                            ` : `
+                                <button class="btn btn-outline-primary" onclick="showQRCode('${device.id}')">
+                                    <i class="fas fa-qrcode"></i> عرض QR
+                                </button>
+                            `}
+                            <button class="btn btn-outline-danger" onclick="confirmDisconnect('${device.id}')">
+                                <i class="fas fa-power-off"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addDevice() {
+            document.getElementById('deviceName').value = '';
+            document.getElementById('qrCode').innerHTML = '';
+            deviceModal.show();
+        }
+
+        function confirmDisconnect(deviceId) {
+            if (confirm('هل أنت متأكد من قطع اتصال هذا الجهاز؟')) {
+                showLoading();
+                socket.emit('disconnectDevice', deviceId);
+            }
+        }
+
+        function showMessageModal(deviceId) {
+            currentDeviceId = deviceId;
+            document.getElementById('recipientName').value = '';
+            document.getElementById('phoneNumber').value = '';
+            document.getElementById('messageText').value = '';
+            populateCountryCodes();
+            messageModal.show();
+        }
+
+        function populateCountryCodes() {
+            const select = document.getElementById('countryCode');
+            select.innerHTML = countries.map(country => 
+                `<option value="${country.code}" ${country.code === '+970' ? 'selected' : ''}>
+                    ${country.name} (${country.code})
+                </option>`
+            ).join('');
+        }
+
+        function sendMessage() {
+            const name = document.getElementById('recipientName').value;
+            const countryCode = document.getElementById('countryCode').value;
+            const phone = document.getElementById('phoneNumber').value;
+            const message = document.getElementById('messageText').value;
+
+            if (!name || !phone || !message) {
+                showNotification('يرجى ملء جميع الحقول', 'error');
+                return;
+            }
+
+            showLoading();
+            socket.emit('sendMessage', {
+                deviceId: currentDeviceId,
+                name,
+                countryCode,
+                phone,
+                message
+            });
+        }
+
+        function refreshDevices() {
+            socket.emit('getDevices');
+        }
+
+        function refreshMessageHistory() {
+            // تحديث سجل الرسائل
+            // يمكن إضافة هذه الوظيفة لاحقاً
+        }
+
+        // تهيئة التطبيق
+        initializeSocket();
+    </script>
+</body>
+</html> 
