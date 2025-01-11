@@ -9,6 +9,10 @@ COPY package*.json ./
 # تثبيت المتطلبات
 RUN npm install
 
+# نسخ server.js أولاً للتأكد من وجوده
+COPY server.js ./
+RUN test -f server.js || exit 1
+
 # نسخ باقي ملفات التطبيق
 COPY . .
 
