@@ -223,6 +223,7 @@
             max-height: 200px;
             overflow-y: auto;
             z-index: 9999;
+            direction: ltr;
         `;
         document.body.appendChild(logContainer);
 
@@ -242,14 +243,6 @@
             console.log(`[${type.toUpperCase()}] ${message}`);
         }
 
-        // دالة للحصول على الكوكيز
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
-        }
-
         // تهيئة Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyCP7a2MRCXqtTP4yMJDtnXrQ3TjHuDA2ng",
@@ -263,6 +256,14 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         log('تم تهيئة Firebase بنجاح');
+
+        // دالة للحصول على الكوكيز
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
 
         // التحقق من حالة تسجيل الدخول
         async function checkAuth() {
@@ -283,10 +284,6 @@
                 return;
             }
 
-            // استخدام التوكن من الكوكيز إذا كان موجوداً
-            const token = cookieToken || localToken;
-            log('جاري استخدام التوكن للتحقق...');
-
             try {
                 // التحقق من Firebase أولاً
                 const currentUser = auth.currentUser;
@@ -300,10 +297,10 @@
                 log('جاري التحقق من التوكن مع الخادم...');
                 const response = await fetch('/api/auth/user', {
                     headers: {
-                        'Authorization': `Bearer ${token}`,
+                        'Authorization': `Bearer ${cookieToken || localToken}`,
                         'Content-Type': 'application/json'
                     },
-                    credentials: 'include' // مهم لإرسال الكوكيز
+                    credentials: 'include'
                 });
 
                 if (!response.ok) {
@@ -312,14 +309,13 @@
                 }
 
                 const data = await response.json();
-                log(`تم التحقق بنجاح. مرحباً ${data.name}`);
-                document.getElementById('userName').textContent = data.name;
+                if (!data.success) {
+                    log('الرد من الخادم يشير إلى فشل المصادقة', 'error');
+                    throw new Error(data.error || 'فشل المصادقة');
+                }
 
-                // تحديث التوكن
-                const newToken = await currentUser.getIdToken();
-                document.cookie = `token=${newToken}; path=/; max-age=86400; secure; samesite=strict`;
-                localStorage.setItem('token', newToken);
-                log('تم تحديث التوكن في الكوكيز والتخزين المحلي');
+                log(`تم التحقق بنجاح. مرحباً ${data.user.name}`);
+                document.getElementById('userName').textContent = data.user.name;
 
             } catch (error) {
                 log(`خطأ في التحقق: ${error.message}`, 'error');
@@ -348,7 +344,6 @@
                 const token = getCookie('token') || localStorage.getItem('token');
                 
                 if (token) {
-                    // تسجيل الخروج من الخادم
                     await fetch('/api/auth/logout', {
                         method: 'POST',
                         headers: {
@@ -360,7 +355,6 @@
                     log('تم تسجيل الخروج من الخادم');
                 }
 
-                // تسجيل الخروج من Firebase
                 await auth.signOut();
                 log('تم تسجيل الخروج من Firebase');
 
@@ -368,7 +362,6 @@
                 redirectToLogin();
             } catch (error) {
                 log(`خطأ في تسجيل الخروج: ${error.message}`, 'error');
-                // حتى لو فشل تسجيل الخروج من الخادم، نقوم بتنظيف البيانات المحلية
                 clearAuthData();
                 redirectToLogin();
             }
