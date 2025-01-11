@@ -4,117 +4,211 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>الصفحة الرئيسية</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* ... existing styles ... */
-        #logContainer {
-            max-height: 200px;
-            overflow-y: auto;
-            background: #f5f5f5;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            font-family: monospace;
-            display: none;
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        .log-info { color: #0066cc; }
-        .log-error { color: #cc0000; }
-        .log-warning { color: #cc6600; }
+        .navbar {
+            background-color: #0d6efd;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .navbar-brand, .nav-link {
+            color: white !important;
+        }
+        .dashboard-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            padding: 20px;
+            transition: transform 0.2s;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+        }
+        #logContainer {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            margin-top: 20px;
+        }
+        .log-entry {
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+        }
+        .log-info { background-color: #cfe2ff; }
+        .log-error { background-color: #f8d7da; }
+        .log-warning { background-color: #fff3cd; }
     </style>
 </head>
 <body>
-    <div id="logContainer"></div>
-    <div id="userInfo"></div>
-    <button onclick="logout()">تسجيل الخروج</button>
+    <!-- شريط التنقل -->
+    <nav class="navbar navbar-expand-lg mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#">لوحة التحكم</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">الرئيسية</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">الإعدادات</a>
+                    </li>
+                </ul>
+                <div class="d-flex">
+                    <span class="nav-link" id="userEmail"></span>
+                    <button class="btn btn-outline-light ms-2" onclick="logout()">تسجيل الخروج</button>
+                </div>
+            </div>
+        </div>
+    </nav>
 
+    <!-- المحتوى الرئيسي -->
+    <div class="container">
+        <div class="row">
+            <!-- بطاقة معلومات المستخدم -->
+            <div class="col-md-4">
+                <div class="dashboard-card">
+                    <h5 class="card-title mb-3">معلومات المستخدم</h5>
+                    <div id="userInfo">
+                        <p class="mb-2">البريد الإلكتروني: <span id="userEmailInfo"></span></p>
+                        <p class="mb-2">آخر تسجيل دخول: <span id="lastLogin"></span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بطاقة الإحصائيات -->
+            <div class="col-md-4">
+                <div class="dashboard-card">
+                    <h5 class="card-title mb-3">الإحصائيات</h5>
+                    <div id="stats">
+                        <p class="mb-2">حالة الاتصال: <span class="badge bg-success">متصل</span></p>
+                        <p class="mb-2">الجلسة الحالية: <span id="sessionTime">00:00:00</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بطاقة الأحداث -->
+            <div class="col-md-4">
+                <div class="dashboard-card">
+                    <h5 class="card-title mb-3">آخر الأحداث</h5>
+                    <div id="recentEvents">
+                        <!-- سيتم ملؤها بواسطة JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- سجل الأحداث -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="dashboard-card">
+                    <h5 class="card-title mb-3">سجل الأحداث</h5>
+                    <div id="logContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // دالة تسجيل الأحداث
+        let sessionStartTime = new Date();
+        let logMessages = [];
+
         function log(message, type = 'info') {
             const logContainer = document.getElementById('logContainer');
             const logEntry = document.createElement('div');
-            logEntry.className = `log-${type}`;
+            logEntry.className = `log-entry log-${type}`;
             logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            logMessages.push({ message, type, time: new Date() });
+            updateRecentEvents();
         }
 
-        // التحقق من الجلسة
-        async function checkSession() {
-            try {
-                log('جاري التحقق من الجلسة...');
-                
-                const response = await fetch('/api/auth/check', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'include'
-                });
+        function updateRecentEvents() {
+            const recentEvents = document.getElementById('recentEvents');
+            const recentLogs = logMessages.slice(-3).reverse();
+            recentEvents.innerHTML = recentLogs.map(log => 
+                `<div class="mb-2"><small>${log.time.toLocaleTimeString()}</small><br>${log.message}</div>`
+            ).join('');
+        }
 
-                // التحقق من نوع المحتوى
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error('استجابة غير صالحة من الخادم');
+        function updateSessionTime() {
+            const sessionTime = document.getElementById('sessionTime');
+            const now = new Date();
+            const diff = now - sessionStartTime;
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            sessionTime.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check', {
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل التحقق من الجلسة');
                 }
 
                 const data = await response.json();
-                log('استجابة الخادم:', JSON.stringify(data));
-                
-                if (!data.isAuthenticated) {
-                    log('الجلسة غير صالحة، جاري إعادة التوجيه...', 'warning');
-                    window.location.href = '/login.html';
-                    return;
-                }
-
+                document.getElementById('userEmail').textContent = data.email;
+                document.getElementById('userEmailInfo').textContent = data.email;
+                document.getElementById('lastLogin').textContent = new Date().toLocaleString();
                 log('تم التحقق من الجلسة بنجاح');
-                document.getElementById('userInfo').textContent = `مرحباً ${data.user.email}`;
             } catch (error) {
-                log('خطأ في التحقق من الجلسة: ' + error.message, 'error');
+                log(error.message, 'error');
                 setTimeout(() => {
                     window.location.href = '/login.html';
                 }, 3000);
             }
         }
 
-        // تسجيل الخروج
         async function logout() {
             try {
-                log('جاري تسجيل الخروج...');
-                
                 const response = await fetch('/api/auth/logout', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
                     credentials: 'include'
                 });
-
-                // التحقق من نوع المحتوى
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error('استجابة غير صالحة من الخادم');
-                }
-
-                const data = await response.json();
-                log('استجابة الخادم:', JSON.stringify(data));
                 
-                if (data.success) {
-                    log('تم تسجيل الخروج بنجاح');
-                    window.location.href = '/login.html';
+                if (!response.ok) {
+                    throw new Error('فشل تسجيل الخروج');
                 }
+
+                log('تم تسجيل الخروج بنجاح');
+                setTimeout(() => {
+                    window.location.href = '/login.html';
+                }, 1000);
             } catch (error) {
-                log('خطأ في تسجيل الخروج: ' + error.message, 'error');
+                log(error.message, 'error');
             }
         }
 
-        // التحقق عند تحميل الصفحة
-        window.onload = function() {
-            document.getElementById('logContainer').style.display = 'block';
-            checkSession();
-            // التحقق الدوري من الجلسة
-            setInterval(checkSession, 60000); // كل دقيقة
-        };
+        // تحديث الوقت كل ثانية
+        setInterval(updateSessionTime, 1000);
+
+        // التحقق من الجلسة عند تحميل الصفحة
+        window.addEventListener('load', () => {
+            checkAuth();
+            log('تم تحميل الصفحة');
+        });
+
+        // التحقق من الجلسة كل دقيقة
+        setInterval(checkAuth, 60000);
     </script>
 </body>
 </html> 
