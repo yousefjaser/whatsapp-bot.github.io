@@ -119,13 +119,22 @@ router.post('/register', async (req, res) => {
 router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
-        console.log('محاولة تسجيل دخول:', email);
+        console.log('بدء محاولة تسجيل الدخول للمستخدم:', email);
+
+        if (!email || !password) {
+            console.error('بيانات غير مكتملة:', { email: !!email, password: !!password });
+            throw new Error('يرجى إدخال البريد الإلكتروني وكلمة المرور');
+        }
 
         // التحقق من المستخدم في Firebase
+        console.log('جاري البحث عن المستخدم في Firebase...');
         const userRecord = await auth.getUserByEmail(email)
             .catch(error => {
-                console.error('خطأ في البحث عن المستخدم:', error);
-                throw new Error('البريد الإلكتروني غير موجود');
+                console.error('خطأ في البحث عن المستخدم:', {
+                    code: error.code,
+                    message: error.message
+                });
+                throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
             });
 
         console.log('تم العثور على المستخدم:', {
@@ -134,58 +143,73 @@ router.post('/login', loginLimiter, async (req, res) => {
             emailVerified: userRecord.emailVerified
         });
 
+        // التحقق من تأكيد البريد الإلكتروني
         if (!userRecord.emailVerified) {
             console.log('البريد الإلكتروني غير مؤكد:', email);
             return res.status(400).json({ 
                 success: false, 
-                error: 'يرجى تأكيد بريدك الإلكتروني أولاً' 
+                error: 'يرجى تأكيد بريدك الإلكتروني أولاً',
+                needsEmailVerification: true
             });
         }
 
-        // إنشاء التوكن
-        const tokenData = { 
-            uid: userRecord.uid, 
-            email: userRecord.email,
-            name: userRecord.displayName 
-        };
-        console.log('بيانات التوكن:', tokenData);
-
-        const token = jwt.sign(tokenData, process.env.JWT_SECRET, { expiresIn: '24h' });
-        console.log('تم إنشاء التوكن');
-
-        // حفظ التوكن في الكوكيز
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge: 24 * 60 * 60 * 1000
-        });
-        console.log('تم حفظ التوكن في الكوكيز');
-
-        // حفظ معلومات الجلسة في Firestore
-        await db.collection('sessions').doc(userRecord.uid).set({
-            token,
-            lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-            userAgent: req.headers['user-agent']
-        });
-        console.log('تم حفظ معلومات الجلسة في Firestore');
-
-        res.json({ 
-            success: true,
-            token,
-            user: {
-                name: userRecord.displayName,
+        try {
+            // إنشاء التوكن
+            console.log('جاري إنشاء التوكن...');
+            const tokenData = { 
+                uid: userRecord.uid, 
                 email: userRecord.email,
-                uid: userRecord.uid
-            },
-            redirect: '/home.html'
-        });
+                name: userRecord.displayName 
+            };
+            
+            const token = jwt.sign(tokenData, process.env.JWT_SECRET, { expiresIn: '24h' });
+            console.log('تم إنشاء التوكن بنجاح');
+
+            // حفظ التوكن في الكوكيز
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
+                maxAge: 24 * 60 * 60 * 1000
+            });
+            console.log('تم حفظ التوكن في الكوكيز');
+
+            // حفظ معلومات الجلسة
+            await db.collection('sessions').doc(userRecord.uid).set({
+                token,
+                lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+                userAgent: req.headers['user-agent'],
+                ipAddress: req.ip
+            });
+            console.log('تم حفظ معلومات الجلسة');
+
+            res.json({ 
+                success: true,
+                token,
+                user: {
+                    name: userRecord.displayName,
+                    email: userRecord.email,
+                    uid: userRecord.uid
+                },
+                redirect: '/home.html'
+            });
+            console.log('تم تسجيل الدخول بنجاح وإرسال الاستجابة');
+        } catch (tokenError) {
+            console.error('خطأ في إنشاء أو حفظ التوكن:', tokenError);
+            throw new Error('حدث خطأ أثناء إنشاء جلسة المستخدم');
+        }
     } catch (error) {
-        console.error('خطأ في تسجيل الدخول:', error);
+        console.error('خطأ في تسجيل الدخول:', {
+            message: error.message,
+            stack: error.stack,
+            originalError: error
+        });
+        
         res.status(401).json({ 
             success: false, 
-            error: error.message || 'حدث خطأ أثناء تسجيل الدخول'
+            error: error.message || 'حدث خطأ أثناء تسجيل الدخول',
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 });
