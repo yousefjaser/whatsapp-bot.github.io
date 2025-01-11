@@ -7,10 +7,20 @@ const rateLimit = require('express-rate-limit');
 
 // التحقق من تهيئة Firebase Admin
 if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
-        databaseURL: process.env.FIREBASE_DATABASE_URL
-    });
+    try {
+        console.log('بدء تهيئة Firebase Admin...');
+        const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+        console.log('تم قراءة إعدادات Firebase بنجاح');
+
+        admin.initializeApp({
+            credential: admin.credential.cert(firebaseConfig),
+            databaseURL: process.env.FIREBASE_DATABASE_URL
+        });
+        console.log('تم تهيئة Firebase Admin بنجاح');
+    } catch (error) {
+        console.error('خطأ في تهيئة Firebase Admin:', error);
+        throw error;
+    }
 }
 
 const auth = admin.auth();
@@ -25,20 +35,28 @@ async function verifyToken(token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log('تم فك تشفير التوكن:', decoded);
 
-        // التحقق من المستخدم في Firebase
-        const userRecord = await auth.getUser(decoded.uid);
-        console.log('تم التحقق من المستخدم في Firebase:', userRecord.uid);
+        try {
+            // التحقق من المستخدم في Firebase
+            const userRecord = await auth.getUser(decoded.uid);
+            console.log('تم التحقق من المستخدم في Firebase:', userRecord.uid);
 
-        return { 
-            valid: true, 
-            user: userRecord,
-            decoded
-        };
-    } catch (error) {
-        console.error('خطأ في التحقق من التوكن:', error);
+            return { 
+                valid: true, 
+                user: userRecord,
+                decoded
+            };
+        } catch (firebaseError) {
+            console.error('خطأ في التحقق من المستخدم في Firebase:', firebaseError);
+            return { 
+                valid: false, 
+                error: 'فشل التحقق من المستخدم في Firebase'
+            };
+        }
+    } catch (jwtError) {
+        console.error('خطأ في التحقق من التوكن JWT:', jwtError);
         return { 
             valid: false, 
-            error: error.message 
+            error: 'التوكن غير صالح'
         };
     }
 }
@@ -101,52 +119,61 @@ router.post('/login', loginLimiter, async (req, res) => {
         const { email, password } = req.body;
         console.log('محاولة تسجيل دخول:', email);
 
-        const userRecord = await auth.getUserByEmail(email);
-        console.log('تم العثور على المستخدم:', userRecord.uid);
+        try {
+            const userRecord = await auth.getUserByEmail(email);
+            console.log('تم العثور على المستخدم:', userRecord.uid);
 
-        if (!userRecord.emailVerified) {
-            console.log('البريد الإلكتروني غير مؤكد:', email);
-            return res.status(400).json({ 
+            if (!userRecord.emailVerified) {
+                console.log('البريد الإلكتروني غير مؤكد:', email);
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'يرجى تأكيد بريدك الإلكتروني أولاً' 
+                });
+            }
+
+            // إنشاء التوكن
+            const token = jwt.sign(
+                { 
+                    uid: userRecord.uid, 
+                    email: userRecord.email,
+                    name: userRecord.displayName 
+                },
+                process.env.JWT_SECRET,
+                { expiresIn: '24h' }
+            );
+            console.log('تم إنشاء التوكن للمستخدم:', userRecord.uid);
+
+            // حفظ التوكن في الكوكيز
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: 24 * 60 * 60 * 1000
+            });
+            console.log('تم حفظ التوكن في الكوكيز');
+
+            res.json({ 
+                success: true,
+                token,
+                user: {
+                    name: userRecord.displayName,
+                    email: userRecord.email,
+                    uid: userRecord.uid
+                },
+                redirect: '/home.html'
+            });
+        } catch (firebaseError) {
+            console.error('خطأ في التحقق من المستخدم في Firebase:', firebaseError);
+            res.status(401).json({ 
                 success: false, 
-                error: 'يرجى تأكيد بريدك الإلكتروني أولاً' 
+                error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' 
             });
         }
-
-        // إنشاء التوكن
-        const token = jwt.sign(
-            { 
-                uid: userRecord.uid, 
-                email: userRecord.email,
-                name: userRecord.displayName 
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-        console.log('تم إنشاء التوكن للمستخدم:', userRecord.uid);
-
-        // حفظ التوكن في الكوكيز
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 24 * 60 * 60 * 1000
-        });
-        console.log('تم حفظ التوكن في الكوكيز');
-
-        res.json({ 
-            success: true,
-            token,
-            user: {
-                name: userRecord.displayName,
-                email: userRecord.email
-            },
-            redirect: '/home.html'
-        });
     } catch (error) {
         console.error('خطأ في تسجيل الدخول:', error);
         res.status(401).json({ 
             success: false, 
-            error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' 
+            error: 'حدث خطأ أثناء تسجيل الدخول' 
         });
     }
 });
