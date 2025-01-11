@@ -10,14 +10,18 @@ RUN apt-get update \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# تعيين متغيرات البيئة
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    CHROME_BIN=/usr/bin/google-chrome
-
+# إنشاء مجلد التطبيق
 WORKDIR /app
+
+# نسخ ملفات التطبيق
 COPY package*.json ./
-RUN npm ci
 COPY . .
 
+# تثبيت المتطلبات
+RUN npm install
+
+# تعريض البورت
 EXPOSE 3001
+
+# تشغيل التطبيق
 CMD ["npm", "start"] 
