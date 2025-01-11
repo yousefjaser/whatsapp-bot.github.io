@@ -42,7 +42,7 @@
             try {
                 log('جاري التحقق من الجلسة...');
                 
-                const response = await fetch('/api/auth/check', {
+                const response = await fetch('/auth/check', {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
@@ -61,6 +61,7 @@
                 }
 
                 const data = await response.json();
+                log('استجابة الخادم:', data);
                 
                 if (!data.isAuthenticated) {
                     log('الجلسة غير صالحة، جاري إعادة التوجيه...', 'warning');
@@ -83,7 +84,7 @@
             try {
                 log('جاري تسجيل الخروج...');
                 
-                const response = await fetch('/api/auth/logout', {
+                const response = await fetch('/auth/logout', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
