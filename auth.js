@@ -10,11 +10,13 @@ if (!admin.apps.length) {
     try {
         console.log('بدء تهيئة Firebase Admin...');
         const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
-        console.log('تم قراءة إعدادات Firebase بنجاح');
+        console.log('تم قراءة إعدادات Firebase:', {
+            project_id: firebaseConfig.project_id,
+            client_email: firebaseConfig.client_email
+        });
 
         admin.initializeApp({
-            credential: admin.credential.cert(firebaseConfig),
-            databaseURL: process.env.FIREBASE_DATABASE_URL
+            credential: admin.credential.cert(firebaseConfig)
         });
         console.log('تم تهيئة Firebase Admin بنجاح');
     } catch (error) {
@@ -119,61 +121,71 @@ router.post('/login', loginLimiter, async (req, res) => {
         const { email, password } = req.body;
         console.log('محاولة تسجيل دخول:', email);
 
-        try {
-            const userRecord = await auth.getUserByEmail(email);
-            console.log('تم العثور على المستخدم:', userRecord.uid);
-
-            if (!userRecord.emailVerified) {
-                console.log('البريد الإلكتروني غير مؤكد:', email);
-                return res.status(400).json({ 
-                    success: false, 
-                    error: 'يرجى تأكيد بريدك الإلكتروني أولاً' 
-                });
-            }
-
-            // إنشاء التوكن
-            const token = jwt.sign(
-                { 
-                    uid: userRecord.uid, 
-                    email: userRecord.email,
-                    name: userRecord.displayName 
-                },
-                process.env.JWT_SECRET,
-                { expiresIn: '24h' }
-            );
-            console.log('تم إنشاء التوكن للمستخدم:', userRecord.uid);
-
-            // حفظ التوكن في الكوكيز
-            res.cookie('token', token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 24 * 60 * 60 * 1000
+        // التحقق من المستخدم في Firebase
+        const userRecord = await auth.getUserByEmail(email)
+            .catch(error => {
+                console.error('خطأ في البحث عن المستخدم:', error);
+                throw new Error('البريد الإلكتروني غير موجود');
             });
-            console.log('تم حفظ التوكن في الكوكيز');
 
-            res.json({ 
-                success: true,
-                token,
-                user: {
-                    name: userRecord.displayName,
-                    email: userRecord.email,
-                    uid: userRecord.uid
-                },
-                redirect: '/home.html'
-            });
-        } catch (firebaseError) {
-            console.error('خطأ في التحقق من المستخدم في Firebase:', firebaseError);
-            res.status(401).json({ 
+        console.log('تم العثور على المستخدم:', {
+            uid: userRecord.uid,
+            email: userRecord.email,
+            emailVerified: userRecord.emailVerified
+        });
+
+        if (!userRecord.emailVerified) {
+            console.log('البريد الإلكتروني غير مؤكد:', email);
+            return res.status(400).json({ 
                 success: false, 
-                error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' 
+                error: 'يرجى تأكيد بريدك الإلكتروني أولاً' 
             });
         }
+
+        // إنشاء التوكن
+        const tokenData = { 
+            uid: userRecord.uid, 
+            email: userRecord.email,
+            name: userRecord.displayName 
+        };
+        console.log('بيانات التوكن:', tokenData);
+
+        const token = jwt.sign(tokenData, process.env.JWT_SECRET, { expiresIn: '24h' });
+        console.log('تم إنشاء التوكن');
+
+        // حفظ التوكن في الكوكيز
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 24 * 60 * 60 * 1000
+        });
+        console.log('تم حفظ التوكن في الكوكيز');
+
+        // حفظ معلومات الجلسة في Firestore
+        await db.collection('sessions').doc(userRecord.uid).set({
+            token,
+            lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+            userAgent: req.headers['user-agent']
+        });
+        console.log('تم حفظ معلومات الجلسة في Firestore');
+
+        res.json({ 
+            success: true,
+            token,
+            user: {
+                name: userRecord.displayName,
+                email: userRecord.email,
+                uid: userRecord.uid
+            },
+            redirect: '/home.html'
+        });
     } catch (error) {
         console.error('خطأ في تسجيل الدخول:', error);
         res.status(401).json({ 
             success: false, 
-            error: 'حدث خطأ أثناء تسجيل الدخول' 
+            error: error.message || 'حدث خطأ أثناء تسجيل الدخول'
         });
     }
 });
@@ -217,53 +229,65 @@ router.get('/user', async (req, res) => {
             });
         }
 
-        console.log('تم العثور على التوكن:', token.substring(0, 20) + '...');
-        const { valid, user, error, decoded } = await verifyToken(token);
+        // فك تشفير التوكن
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('تم فك تشفير التوكن:', decoded);
 
-        if (!valid) {
-            console.log('التوكن غير صالح:', error);
-            return res.status(401).json({ 
-                success: false,
-                error: 'جلسة غير صالحة' 
-            });
+        // التحقق من المستخدم في Firebase
+        const userRecord = await auth.getUser(decoded.uid);
+        console.log('تم التحقق من المستخدم في Firebase:', {
+            uid: userRecord.uid,
+            email: userRecord.email
+        });
+
+        // التحقق من الجلسة في Firestore
+        const sessionDoc = await db.collection('sessions').doc(userRecord.uid).get();
+        if (!sessionDoc.exists || sessionDoc.data().token !== token) {
+            console.log('الجلسة غير صالحة');
+            throw new Error('الجلسة غير صالحة');
         }
 
-        console.log('تم التحقق بنجاح. المستخدم:', user.uid);
-        
-        // إنشاء توكن جديد
+        // تجديد التوكن
         const newToken = jwt.sign(
             { 
-                uid: user.uid, 
-                email: user.email,
-                name: user.displayName 
+                uid: userRecord.uid, 
+                email: userRecord.email,
+                name: userRecord.displayName 
             },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
 
-        // تحديث الكوكيز
+        // تحديث الكوكيز والجلسة
         res.cookie('token', newToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: 'lax',
+            path: '/',
             maxAge: 24 * 60 * 60 * 1000
+        });
+
+        await db.collection('sessions').doc(userRecord.uid).update({
+            token: newToken,
+            lastAccess: admin.firestore.FieldValue.serverTimestamp()
         });
 
         res.json({
             success: true,
             user: {
-                name: user.displayName,
-                email: user.email,
-                emailVerified: user.emailVerified,
-                uid: user.uid
+                name: userRecord.displayName,
+                email: userRecord.email,
+                emailVerified: userRecord.emailVerified,
+                uid: userRecord.uid
             },
             token: newToken
         });
     } catch (error) {
         console.error('خطأ في جلب معلومات المستخدم:', error);
+        res.clearCookie('token');
         res.status(401).json({ 
             success: false,
-            error: 'غير مصرح' 
+            error: error.message || 'غير مصرح'
         });
     }
 });
