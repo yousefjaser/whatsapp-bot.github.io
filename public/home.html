@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>الصفحة الرئيسية</title>
+    <title>WhatsApp Bot - الصفحة الرئيسية</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
@@ -11,47 +11,70 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         .navbar {
-            background-color: #0d6efd;
+            background-color: #25D366;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .navbar-brand, .nav-link {
             color: white !important;
         }
-        .dashboard-card {
+        .main-container {
+            padding: 40px 20px;
+        }
+        .feature-card {
             background: white;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
             padding: 20px;
+            margin-bottom: 20px;
             transition: transform 0.2s;
+            text-align: center;
+            cursor: pointer;
         }
-        .dashboard-card:hover {
+        .feature-card:hover {
             transform: translateY(-5px);
         }
-        #logContainer {
-            max-height: 300px;
-            overflow-y: auto;
-            background: #f8f9fa;
-            padding: 15px;
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: #25D366;
+        }
+        .welcome-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .welcome-section h1 {
+            color: #075E54;
+            margin-bottom: 20px;
+        }
+        .btn-whatsapp {
+            background-color: #25D366;
+            color: white;
+            border: none;
+            padding: 12px 25px;
             border-radius: 8px;
-            border: 1px solid #dee2e6;
-            margin-top: 20px;
+            font-weight: 600;
+            margin: 10px;
         }
-        .log-entry {
-            padding: 8px;
-            margin-bottom: 8px;
-            border-radius: 4px;
+        .btn-whatsapp:hover {
+            background-color: #128C7E;
+            color: white;
         }
-        .log-info { background-color: #cfe2ff; }
-        .log-error { background-color: #f8d7da; }
-        .log-warning { background-color: #fff3cd; }
+        .error-message {
+            display: none;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #f8d7da;
+            color: #842029;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <!-- شريط التنقل -->
-    <nav class="navbar navbar-expand-lg mb-4">
+    <nav class="navbar navbar-expand-lg">
         <div class="container">
-            <a class="navbar-brand" href="#">لوحة التحكم</a>
+            <a class="navbar-brand" href="#">WhatsApp Bot</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -59,9 +82,6 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link active" href="#">الرئيسية</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#">الإعدادات</a>
                     </li>
                 </ul>
                 <div class="d-flex">
@@ -72,86 +92,41 @@
         </div>
     </nav>
 
-    <!-- المحتوى الرئيسي -->
-    <div class="container">
+    <div class="container main-container">
+        <!-- قسم الترحيب -->
+        <div class="welcome-section">
+            <h1>مرحباً بك في WhatsApp Bot</h1>
+            <p class="lead">اختر إحدى الخدمات التالية للبدء</p>
+        </div>
+
         <div class="row">
-            <!-- بطاقة معلومات المستخدم -->
-            <div class="col-md-4">
-                <div class="dashboard-card">
-                    <h5 class="card-title mb-3">معلومات المستخدم</h5>
-                    <div id="userInfo">
-                        <p class="mb-2">البريد الإلكتروني: <span id="userEmailInfo"></span></p>
-                        <p class="mb-2">آخر تسجيل دخول: <span id="lastLogin"></span></p>
-                    </div>
+            <!-- إرسال رسائل -->
+            <div class="col-md-6 mb-4">
+                <div class="feature-card" onclick="window.location.href='/send.html'">
+                    <div class="feature-icon">📨</div>
+                    <h3>إرسال رسائل</h3>
+                    <p>إرسال رسائل WhatsApp بسهولة</p>
+                    <button class="btn btn-whatsapp">ابدأ الآن</button>
                 </div>
             </div>
-            
-            <!-- بطاقة الإحصائيات -->
-            <div class="col-md-4">
-                <div class="dashboard-card">
-                    <h5 class="card-title mb-3">الإحصائيات</h5>
-                    <div id="stats">
-                        <p class="mb-2">حالة الاتصال: <span class="badge bg-success">متصل</span></p>
-                        <p class="mb-2">الجلسة الحالية: <span id="sessionTime">00:00:00</span></p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- بطاقة الأحداث -->
-            <div class="col-md-4">
-                <div class="dashboard-card">
-                    <h5 class="card-title mb-3">آخر الأحداث</h5>
-                    <div id="recentEvents">
-                        <!-- سيتم ملؤها بواسطة JavaScript -->
-                    </div>
+
+            <!-- توثيق API -->
+            <div class="col-md-6 mb-4">
+                <div class="feature-card" onclick="window.location.href='/docs.html'">
+                    <div class="feature-icon">📚</div>
+                    <h3>توثيق API</h3>
+                    <p>تعرف على كيفية استخدام API</p>
+                    <button class="btn btn-whatsapp">اقرأ المزيد</button>
                 </div>
             </div>
         </div>
 
-        <!-- سجل الأحداث -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="dashboard-card">
-                    <h5 class="card-title mb-3">سجل الأحداث</h5>
-                    <div id="logContainer"></div>
-                </div>
-            </div>
-        </div>
+        <!-- رسائل الخطأ -->
+        <div id="errorMessage" class="error-message"></div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let sessionStartTime = new Date();
-        let logMessages = [];
-
-        function log(message, type = 'info') {
-            const logContainer = document.getElementById('logContainer');
-            const logEntry = document.createElement('div');
-            logEntry.className = `log-entry log-${type}`;
-            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logContainer.insertBefore(logEntry, logContainer.firstChild);
-            logMessages.push({ message, type, time: new Date() });
-            updateRecentEvents();
-        }
-
-        function updateRecentEvents() {
-            const recentEvents = document.getElementById('recentEvents');
-            const recentLogs = logMessages.slice(-3).reverse();
-            recentEvents.innerHTML = recentLogs.map(log => 
-                `<div class="mb-2"><small>${log.time.toLocaleTimeString()}</small><br>${log.message}</div>`
-            ).join('');
-        }
-
-        function updateSessionTime() {
-            const sessionTime = document.getElementById('sessionTime');
-            const now = new Date();
-            const diff = now - sessionStartTime;
-            const hours = Math.floor(diff / 3600000);
-            const minutes = Math.floor((diff % 3600000) / 60000);
-            const seconds = Math.floor((diff % 60000) / 1000);
-            sessionTime.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        }
-
         async function checkAuth() {
             try {
                 const response = await fetch('/api/auth/check', {
@@ -167,11 +142,10 @@
 
                 const data = await response.json();
                 document.getElementById('userEmail').textContent = data.email;
-                document.getElementById('userEmailInfo').textContent = data.email;
-                document.getElementById('lastLogin').textContent = new Date().toLocaleString();
-                log('تم التحقق من الجلسة بنجاح');
             } catch (error) {
-                log(error.message, 'error');
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.textContent = error.message;
+                errorMessage.style.display = 'block';
                 setTimeout(() => {
                     window.location.href = '/login.html';
                 }, 3000);
@@ -189,23 +163,16 @@
                     throw new Error('فشل تسجيل الخروج');
                 }
 
-                log('تم تسجيل الخروج بنجاح');
-                setTimeout(() => {
-                    window.location.href = '/login.html';
-                }, 1000);
+                window.location.href = '/login.html';
             } catch (error) {
-                log(error.message, 'error');
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.textContent = error.message;
+                errorMessage.style.display = 'block';
             }
         }
 
-        // تحديث الوقت كل ثانية
-        setInterval(updateSessionTime, 1000);
-
         // التحقق من الجلسة عند تحميل الصفحة
-        window.addEventListener('load', () => {
-            checkAuth();
-            log('تم تحميل الصفحة');
-        });
+        window.addEventListener('load', checkAuth);
 
         // التحقق من الجلسة كل دقيقة
         setInterval(checkAuth, 60000);
