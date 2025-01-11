@@ -1,259 +1,196 @@
 const express = require('express');
 const router = express.Router();
-const { Client, MessageMedia, LocalAuth } = require('whatsapp-web.js');
+const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-const fs = require('fs');
-const path = require('path');
-const rateLimit = require('express-rate-limit');
+const admin = require('firebase-admin');
+const { validateSession } = require('../middleware/auth');
 
-// إدارة الجلسات النشطة
-const sessions = new Map();
-
-// التحقق من المصادقة
-const authMiddleware = require('../middleware/auth');
-
-// تحديد حد الطلبات
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 دقيقة
-    max: 100, // حد أقصى 100 طلب
-    message: { error: 'تم تجاوز حد الطلبات المسموح به. حاول مرة أخرى بعد 15 دقيقة' }
-});
+// تخزين الجلسات النشطة في الذاكرة
+const activeSessions = new Map();
 
 // إنشاء جلسة جديدة
-router.post('/session/create', authMiddleware, async (req, res) => {
+router.post('/session/create', validateSession, async (req, res) => {
     try {
-        const userId = req.user.uid;
-        
-        // التحقق من عدم وجود جلسة نشطة
-        if (sessions.has(userId)) {
-            return res.status(400).json({ error: 'لديك جلسة نشطة بالفعل' });
+        const { deviceId } = req.body;
+        const userId = req.session.userId;
+
+        // التحقق من ملكية الجهاز
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
         }
 
-        // إنشاء مجلد للمستخدم
-        const userSessionPath = path.join(__dirname, '../sessions', userId);
-        if (!fs.existsSync(userSessionPath)) {
-            fs.mkdirSync(userSessionPath, { recursive: true });
+        // التحقق من وجود جلسة محفوظة
+        const deviceData = device.data();
+        let client;
+
+        if (deviceData.sessionData) {
+            // محاولة استعادة الجلسة
+            client = new Client({
+                session: deviceData.sessionData,
+                puppeteer: {
+                    args: ['--no-sandbox']
+                }
+            });
+        } else {
+            // إنشاء جلسة جديدة
+            client = new Client({
+                puppeteer: {
+                    args: ['--no-sandbox']
+                }
+            });
         }
 
-        // إنشاء عميل جديد
-        const client = new Client({
-            authStrategy: new LocalAuth({ clientId: userId }),
-            puppeteer: {
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            }
-        });
-
-        // معالجة حدث QR code
-        client.on('qr', async (qr) => {
+        // تعيين معالجات الأحداث
+        client.on('qr', async (qrCode) => {
             try {
-                const qrCode = await qrcode.toDataURL(qr);
-                sessions.get(userId).qr = qrCode;
+                const qrDataUrl = await qrcode.toDataURL(qrCode);
+                // تحديث حالة الجهاز مع رمز QR
+                await deviceRef.update({
+                    status: 'pending',
+                    qrCode: qrDataUrl,
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
+                });
             } catch (error) {
-                console.error('خطأ في إنشاء QR code:', error);
+                console.error('خطأ في توليد QR:', error);
             }
         });
 
-        // معالجة حدث الجاهزية
-        client.on('ready', () => {
-            sessions.get(userId).status = 'ready';
-            console.log(`جلسة المستخدم ${userId} جاهزة`);
+        client.on('ready', async () => {
+            try {
+                // حفظ بيانات الجلسة في Firebase
+                const sessionData = client.pupPage ? await client.pupPage.evaluate(() => {
+                    return localStorage.getItem('WAToken1');
+                }) : null;
+
+                await deviceRef.update({
+                    status: 'connected',
+                    sessionData: sessionData,
+                    qrCode: null,
+                    lastConnection: admin.firestore.FieldValue.serverTimestamp(),
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (error) {
+                console.error('خطأ في حفظ بيانات الجلسة:', error);
+            }
         });
 
-        // معالجة حدث الاتصال
-        client.on('authenticated', () => {
-            sessions.get(userId).status = 'authenticated';
-            console.log(`تم مصادقة المستخدم ${userId}`);
+        client.on('disconnected', async () => {
+            try {
+                await deviceRef.update({
+                    status: 'disconnected',
+                    qrCode: null,
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (error) {
+                console.error('خطأ في تحديث حالة الانقطاع:', error);
+            }
         });
 
-        // معالجة حدث قطع الاتصال
-        client.on('disconnected', () => {
-            sessions.get(userId).status = 'disconnected';
-            console.log(`تم قطع اتصال المستخدم ${userId}`);
-        });
-
-        // تخزين معلومات الجلسة
-        sessions.set(userId, {
+        // تخزين الجلسة في الذاكرة
+        activeSessions.set(deviceId, {
             client,
-            status: 'initializing',
-            qr: null,
-            created: new Date()
+            userId,
+            deviceRef
         });
 
-        // بدء العميل
+        // بدء تشغيل العميل
         await client.initialize();
 
-        res.json({ message: 'تم إنشاء الجلسة بنجاح' });
+        res.json({
+            success: true,
+            message: 'تم بدء الجلسة بنجاح'
+        });
+
     } catch (error) {
         console.error('خطأ في إنشاء الجلسة:', error);
-        res.status(500).json({ error: 'حدث خطأ أثناء إنشاء الجلسة' });
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في إنشاء الجلسة'
+        });
     }
 });
 
-// إرسال رسالة نصية
-router.post('/message/send', [authMiddleware, apiLimiter], async (req, res) => {
+// إغلاق جلسة
+router.post('/session/close/:deviceId', validateSession, async (req, res) => {
     try {
-        const { phone, message } = req.body;
-        const userId = req.user.uid;
+        const { deviceId } = req.params;
+        const userId = req.session.userId;
 
-        if (!phone || !message) {
-            return res.status(400).json({ error: 'رقم الهاتف والرسالة مطلوبان' });
+        // التحقق من ملكية الجهاز
+        const session = activeSessions.get(deviceId);
+        if (!session || session.userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بإغلاق هذه الجلسة'
+            });
         }
 
-        const session = sessions.get(userId);
-        if (!session || session.status !== 'ready') {
-            return res.status(400).json({ error: 'لا توجد جلسة نشطة' });
-        }
+        // حفظ بيانات الجلسة قبل الإغلاق
+        const sessionData = session.client.pupPage ? await session.client.pupPage.evaluate(() => {
+            return localStorage.getItem('WAToken1');
+        }) : null;
 
-        // تنسيق رقم الهاتف
-        const formattedPhone = phone.replace(/\D/g, '');
-        const chatId = `${formattedPhone}@c.us`;
-
-        // إرسال الرسالة
-        const response = await session.client.sendMessage(chatId, message);
-        
-        res.json({
-            message: 'تم إرسال الرسالة بنجاح',
-            messageId: response.id._serialized
+        await session.deviceRef.update({
+            status: 'disconnected',
+            sessionData: sessionData,
+            qrCode: null,
+            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
         });
-    } catch (error) {
-        console.error('خطأ في إرسال الرسالة:', error);
-        res.status(500).json({ error: 'حدث خطأ أثناء إرسال الرسالة' });
-    }
-});
 
-// إرسال صورة
-router.post('/message/send-media', [authMiddleware, apiLimiter], async (req, res) => {
-    try {
-        const { phone, mediaUrl, caption } = req.body;
-        const userId = req.user.uid;
-
-        if (!phone || !mediaUrl) {
-            return res.status(400).json({ error: 'رقم الهاتف ورابط الوسائط مطلوبان' });
-        }
-
-        const session = sessions.get(userId);
-        if (!session || session.status !== 'ready') {
-            return res.status(400).json({ error: 'لا توجد جلسة نشطة' });
-        }
-
-        // تحميل الوسائط
-        const media = await MessageMedia.fromUrl(mediaUrl);
-        
-        // تنسيق رقم الهاتف
-        const formattedPhone = phone.replace(/\D/g, '');
-        const chatId = `${formattedPhone}@c.us`;
-
-        // إرسال الوسائط
-        const response = await session.client.sendMessage(chatId, media, { caption });
-        
-        res.json({
-            message: 'تم إرسال الوسائط بنجاح',
-            messageId: response.id._serialized
-        });
-    } catch (error) {
-        console.error('خطأ في إرسال الوسائط:', error);
-        res.status(500).json({ error: 'حدث خطأ أثناء إرسال الوسائط' });
-    }
-});
-
-// إرسال موقع
-router.post('/message/send-location', [authMiddleware, apiLimiter], async (req, res) => {
-    try {
-        const { phone, latitude, longitude, description } = req.body;
-        const userId = req.user.uid;
-
-        if (!phone || !latitude || !longitude) {
-            return res.status(400).json({ error: 'رقم الهاتف والإحداثيات مطلوبة' });
-        }
-
-        const session = sessions.get(userId);
-        if (!session || session.status !== 'ready') {
-            return res.status(400).json({ error: 'لا توجد جلسة نشطة' });
-        }
-
-        // تنسيق رقم الهاتف
-        const formattedPhone = phone.replace(/\D/g, '');
-        const chatId = `${formattedPhone}@c.us`;
-
-        // إرسال الموقع
-        const response = await session.client.sendMessage(chatId, {
-            location: { latitude, longitude, description }
-        });
-        
-        res.json({
-            message: 'تم إرسال الموقع بنجاح',
-            messageId: response.id._serialized
-        });
-    } catch (error) {
-        console.error('خطأ في إرسال الموقع:', error);
-        res.status(500).json({ error: 'حدث خطأ أثناء إرسال الموقع' });
-    }
-});
-
-// الحصول على حالة الرسالة
-router.get('/message/status/:messageId', authMiddleware, async (req, res) => {
-    try {
-        const { messageId } = req.params;
-        const userId = req.user.uid;
-
-        const session = sessions.get(userId);
-        if (!session || session.status !== 'ready') {
-            return res.status(400).json({ error: 'لا توجد جلسة نشطة' });
-        }
-
-        const message = await session.client.getMessageById(messageId);
-        if (!message) {
-            return res.status(404).json({ error: 'الرسالة غير موجودة' });
-        }
-
-        res.json({
-            status: message.ack,
-            timestamp: message.timestamp
-        });
-    } catch (error) {
-        console.error('خطأ في جلب حالة الرسالة:', error);
-        res.status(500).json({ error: 'حدث خطأ أثناء جلب حالة الرسالة' });
-    }
-});
-
-// إغلاق الجلسة
-router.post('/session/close', authMiddleware, async (req, res) => {
-    try {
-        const userId = req.user.uid;
-        const session = sessions.get(userId);
-
-        if (!session) {
-            return res.status(400).json({ error: 'لا توجد جلسة نشطة' });
-        }
-
+        // إغلاق الجلسة
         await session.client.destroy();
-        sessions.delete(userId);
+        activeSessions.delete(deviceId);
 
-        res.json({ message: 'تم إغلاق الجلسة بنجاح' });
+        res.json({
+            success: true,
+            message: 'تم إغلاق الجلسة بنجاح'
+        });
+
     } catch (error) {
         console.error('خطأ في إغلاق الجلسة:', error);
-        res.status(500).json({ error: 'حدث خطأ أثناء إغلاق الجلسة' });
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في إغلاق الجلسة'
+        });
     }
 });
 
 // الحصول على حالة الجلسة
-router.get('/session/status', authMiddleware, (req, res) => {
+router.get('/session/status/:deviceId', validateSession, async (req, res) => {
     try {
-        const userId = req.user.uid;
-        const session = sessions.get(userId);
+        const { deviceId } = req.params;
+        const userId = req.session.userId;
 
-        if (!session) {
-            return res.json({ status: 'disconnected' });
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
         }
 
+        const deviceData = device.data();
         res.json({
-            status: session.status,
-            qr: session.qr,
-            created: session.created
+            success: true,
+            status: deviceData.status,
+            qrCode: deviceData.qrCode,
+            lastConnection: deviceData.lastConnection
         });
+
     } catch (error) {
         console.error('خطأ في جلب حالة الجلسة:', error);
-        res.status(500).json({ error: 'حدث خطأ أثناء جلب حالة الجلسة' });
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في جلب حالة الجلسة'
+        });
     }
 });
 

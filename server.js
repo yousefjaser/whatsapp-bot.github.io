@@ -48,10 +48,14 @@ app.use(session({
 const authRoutes = require('./routes/auth');
 const devicesRoutes = require('./routes/devices');
 const whatsappRoutes = require('./routes/whatsapp');
+const sendRoutes = require('./routes/send');
+const apiRoutes = require('./routes/api');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/send', sendRoutes);
+app.use('/api/v1', apiRoutes);
 
 // تقديم الملفات الثابتة
 app.use(express.static('public'));

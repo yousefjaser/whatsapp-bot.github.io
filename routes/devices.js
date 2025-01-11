@@ -1,147 +1,200 @@
 const express = require('express');
 const router = express.Router();
-const { Client } = require('whatsapp-web.js');
-const qrcode = require('qrcode');
-const fs = require('fs');
-const path = require('path');
-
-// تخزين الأجهزة النشطة
-const activeDevices = new Map();
-
-// التحقق من المصادقة
-const authMiddleware = (req, res, next) => {
-    if (!req.session || !req.session.userId) {
-        return res.status(401).json({ error: 'غير مصرح' });
-    }
-    next();
-};
-
-// الحصول على قائمة الأجهزة
-router.get('/', authMiddleware, (req, res) => {
-    const userDevices = Array.from(activeDevices.entries())
-        .filter(([_, device]) => device.userId === req.session.userId)
-        .map(([id, device]) => ({
-            id,
-            name: device.name,
-            connected: device.client.pupPage ? true : false
-        }));
-    
-    res.json(userDevices);
-});
+const admin = require('firebase-admin');
+const { validateSession } = require('../middleware/auth');
 
 // إضافة جهاز جديد
-router.post('/new', authMiddleware, async (req, res) => {
+router.post('/add', validateSession, async (req, res) => {
     try {
-        const deviceId = Date.now().toString();
-        const client = new Client({
-            puppeteer: {
-                args: ['--no-sandbox']
+        const { name } = req.body;
+        const userId = req.session.userId;
+
+        // إنشاء وثيقة جديدة في مجموعة الأجهزة
+        const deviceRef = await admin.firestore().collection('devices').add({
+            name: name || 'جهاز جديد',
+            userId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            status: 'pending', // pending, connected, disconnected
+            lastConnection: null,
+            isActive: true,
+            sessionData: null, // سيتم تخزين بيانات الجلسة هنا
+            metadata: {
+                browser: req.headers['user-agent'],
+                ip: req.ip,
+                lastUpdate: admin.firestore.FieldValue.serverTimestamp()
             }
         });
 
-        let qr = '';
-        client.on('qr', async (qrCode) => {
-            qr = await qrcode.toDataURL(qrCode);
+        res.json({
+            success: true,
+            deviceId: deviceRef.id,
+            message: 'تم إضافة الجهاز بنجاح'
         });
 
-        client.on('ready', () => {
-            console.log(`جهاز ${deviceId} جاهز`);
-        });
-
-        client.on('disconnected', () => {
-            console.log(`جهاز ${deviceId} غير متصل`);
-        });
-
-        await client.initialize();
-
-        activeDevices.set(deviceId, {
-            client,
-            userId: req.session.userId,
-            name: `جهاز ${deviceId.slice(-4)}`
-        });
-
-        // انتظار توليد رمز QR
-        let attempts = 0;
-        while (!qr && attempts < 10) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            attempts++;
-        }
-
-        if (!qr) {
-            throw new Error('فشل توليد رمز QR');
-        }
-
-        res.json({ deviceId, qr });
     } catch (error) {
-        console.error('خطأ في إضافة جهاز جديد:', error);
-        res.status(500).json({ error: 'فشل إضافة جهاز جديد' });
+        console.error('خطأ في إضافة جهاز:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في إضافة الجهاز'
+        });
     }
 });
 
-// التحقق من حالة الجهاز
-router.get('/:deviceId/status', authMiddleware, (req, res) => {
-    const device = activeDevices.get(req.params.deviceId);
-    
-    if (!device || device.userId !== req.session.userId) {
-        return res.status(404).json({ error: 'الجهاز غير موجود' });
-    }
-
-    res.json({
-        connected: device.client.pupPage ? true : false
-    });
-});
-
-// إعادة اتصال الجهاز
-router.post('/:deviceId/reconnect', authMiddleware, async (req, res) => {
+// تحديث حالة الجهاز وبيانات الجلسة
+router.post('/update-session/:deviceId', validateSession, async (req, res) => {
     try {
-        const device = activeDevices.get(req.params.deviceId);
-        
-        if (!device || device.userId !== req.session.userId) {
-            return res.status(404).json({ error: 'الجهاز غير موجود' });
+        const { deviceId } = req.params;
+        const { sessionData, status } = req.body;
+        const userId = req.session.userId;
+
+        // التحقق من ملكية الجهاز
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
         }
 
-        await device.client.destroy();
-        await device.client.initialize();
-
-        let qr = '';
-        device.client.on('qr', async (qrCode) => {
-            qr = await qrcode.toDataURL(qrCode);
+        // تحديث بيانات الجهاز
+        await deviceRef.update({
+            sessionData: sessionData || admin.firestore.FieldValue.delete(),
+            status: status || 'disconnected',
+            lastConnection: status === 'connected' ? admin.firestore.FieldValue.serverTimestamp() : null,
+            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
         });
 
-        // انتظار توليد رمز QR
-        let attempts = 0;
-        while (!qr && attempts < 10) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            attempts++;
-        }
+        res.json({
+            success: true,
+            message: 'تم تحديث حالة الجهاز بنجاح'
+        });
 
-        if (!qr) {
-            throw new Error('فشل توليد رمز QR');
-        }
-
-        res.json({ qr });
     } catch (error) {
-        console.error('خطأ في إعادة الاتصال:', error);
-        res.status(500).json({ error: 'فشل إعادة الاتصال بالجهاز' });
+        console.error('خطأ في تحديث حالة الجهاز:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في تحديث حالة الجهاز'
+        });
     }
 });
 
 // حذف جهاز
-router.delete('/:deviceId', authMiddleware, async (req, res) => {
+router.delete('/:deviceId', validateSession, async (req, res) => {
     try {
-        const device = activeDevices.get(req.params.deviceId);
-        
-        if (!device || device.userId !== req.session.userId) {
-            return res.status(404).json({ error: 'الجهاز غير موجود' });
+        const { deviceId } = req.params;
+        const userId = req.session.userId;
+
+        // التحقق من ملكية الجهاز
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بحذف هذا الجهاز'
+            });
         }
 
-        await device.client.destroy();
-        activeDevices.delete(req.params.deviceId);
-        
-        res.json({ message: 'تم حذف الجهاز بنجاح' });
+        // تحديث الجهاز كغير نشط بدلاً من حذفه
+        await deviceRef.update({
+            isActive: false,
+            status: 'disconnected',
+            sessionData: admin.firestore.FieldValue.delete(),
+            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
+            'metadata.deletedAt': admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        res.json({
+            success: true,
+            message: 'تم حذف الجهاز بنجاح'
+        });
+
     } catch (error) {
         console.error('خطأ في حذف الجهاز:', error);
-        res.status(500).json({ error: 'فشل حذف الجهاز' });
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في حذف الجهاز'
+        });
+    }
+});
+
+// الحصول على قائمة الأجهزة النشطة
+router.get('/', validateSession, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+
+        const devicesSnapshot = await admin.firestore()
+            .collection('devices')
+            .where('userId', '==', userId)
+            .where('isActive', '==', true)
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        const devices = [];
+        devicesSnapshot.forEach(doc => {
+            const device = doc.data();
+            devices.push({
+                id: doc.id,
+                name: device.name,
+                status: device.status,
+                lastConnection: device.lastConnection,
+                connected: device.status === 'connected',
+                sessionData: device.sessionData // سيتم استخدامه لاستعادة الجلسة
+            });
+        });
+
+        res.json({
+            success: true,
+            devices
+        });
+
+    } catch (error) {
+        console.error('خطأ في جلب قائمة الأجهزة:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في جلب قائمة الأجهزة'
+        });
+    }
+});
+
+// استعادة جلسة جهاز
+router.get('/session/:deviceId', validateSession, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const userId = req.session.userId;
+
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
+        }
+
+        const deviceData = device.data();
+        
+        if (!deviceData.sessionData) {
+            return res.status(404).json({
+                success: false,
+                error: 'لا توجد جلسة محفوظة لهذا الجهاز'
+            });
+        }
+
+        res.json({
+            success: true,
+            sessionData: deviceData.sessionData
+        });
+
+    } catch (error) {
+        console.error('خطأ في استعادة جلسة الجهاز:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في استعادة جلسة الجهاز'
+        });
     }
 });
 
