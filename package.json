@@ -1,41 +1,22 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "WhatsApp Bot API with admin dashboard",
-  "main": "index.js",
-  "homepage": "https://yousefjaser.github.io/whatsapp-bot",
+  "description": "WhatsApp Bot with Authentication",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build",
-    "build": "if not exist build mkdir build && xcopy /E /I /Y public build\\public\\ && copy *.html build\\ && copy *.js build\\"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
-  "keywords": [
-    "whatsapp",
-    "bot",
-    "api",
-    "firebase",
-    "admin"
-  ],
-  "author": "Yousef Jaser",
-  "license": "MIT",
   "dependencies": {
     "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "firebase-admin": "^11.11.0",
-    "jsonwebtoken": "^9.0.2",
-    "qrcode": "^1.5.3",
-    "socket.io": "^4.7.2",
-    "whatsapp-web.js": "^1.23.0"
+    "express-rate-limit": "^7.1.5",
+    "firebase-admin": "^12.0.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "gh-pages": "^6.1.1",
-    "nodemon": "^3.0.1"
-  },
-  "engines": {
-    "node": "18.x"
+    "nodemon": "^3.0.2"
   }
 }
