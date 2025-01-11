@@ -19,12 +19,27 @@ const db = admin.firestore();
 // دالة مساعدة للتحقق من التوكن
 async function verifyToken(token) {
     try {
+        console.log('بدء التحقق من التوكن:', token.substring(0, 20) + '...');
+        
+        // التحقق من JWT
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('تم فك تشفير التوكن:', decoded);
+
+        // التحقق من المستخدم في Firebase
         const userRecord = await auth.getUser(decoded.uid);
-        return { valid: true, user: userRecord };
+        console.log('تم التحقق من المستخدم في Firebase:', userRecord.uid);
+
+        return { 
+            valid: true, 
+            user: userRecord,
+            decoded
+        };
     } catch (error) {
         console.error('خطأ في التحقق من التوكن:', error);
-        return { valid: false, error: error.message };
+        return { 
+            valid: false, 
+            error: error.message 
+        };
     }
 }
 
@@ -161,8 +176,11 @@ router.post('/forgot-password', async (req, res) => {
 // جلب معلومات المستخدم
 router.get('/user', async (req, res) => {
     try {
+        console.log('طلب جلب معلومات المستخدم');
+        console.log('الكوكيز:', req.cookies);
+        console.log('الهيدرز:', req.headers);
+        
         const token = req.cookies.token || req.header('Authorization')?.replace('Bearer ', '');
-        console.log('محاولة جلب معلومات المستخدم');
         
         if (!token) {
             console.log('لم يتم العثور على التوكن');
@@ -172,7 +190,9 @@ router.get('/user', async (req, res) => {
             });
         }
 
-        const { valid, user, error } = await verifyToken(token);
+        console.log('تم العثور على التوكن:', token.substring(0, 20) + '...');
+        const { valid, user, error, decoded } = await verifyToken(token);
+
         if (!valid) {
             console.log('التوكن غير صالح:', error);
             return res.status(401).json({ 
@@ -181,14 +201,36 @@ router.get('/user', async (req, res) => {
             });
         }
 
-        console.log('تم جلب معلومات المستخدم بنجاح:', user.uid);
+        console.log('تم التحقق بنجاح. المستخدم:', user.uid);
+        
+        // إنشاء توكن جديد
+        const newToken = jwt.sign(
+            { 
+                uid: user.uid, 
+                email: user.email,
+                name: user.displayName 
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        // تحديث الكوكيز
+        res.cookie('token', newToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000
+        });
+
         res.json({
             success: true,
             user: {
                 name: user.displayName,
                 email: user.email,
-                emailVerified: user.emailVerified
-            }
+                emailVerified: user.emailVerified,
+                uid: user.uid
+            },
+            token: newToken
         });
     } catch (error) {
         console.error('خطأ في جلب معلومات المستخدم:', error);

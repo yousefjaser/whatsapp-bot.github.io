@@ -331,6 +331,12 @@
                     throw new Error(data.error || 'فشل التحقق من التوكن');
                 }
 
+                // تحديث التوكن
+                if (data.token) {
+                    log('تم استلام توكن جديد', 'debug');
+                    localStorage.setItem('token', data.token);
+                }
+
                 document.getElementById('userName').textContent = data.user.name;
                 log(`تم تحديث اسم المستخدم: ${data.user.name}`, 'info');
 
