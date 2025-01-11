@@ -367,20 +367,37 @@ router.put('/user', async (req, res) => {
 async function verifyAndRefreshToken(token) {
     try {
         console.log('التحقق من صلاحية التوكن:', token);
-        const decodedToken = await admin.auth().verifyIdToken(token);
+        const decodedToken = await jwt.verify(token, process.env.JWT_SECRET);
         console.log('التوكن صالح:', decodedToken);
         return { valid: true, uid: decodedToken.uid };
     } catch (error) {
         console.log('خطأ في التحقق من التوكن:', error.message);
-        // إذا كان التوكن غير صالح، نقوم بإنشاء توكن جديد
         try {
-            const user = await admin.auth().getUser(error.uid);
-            const newToken = await admin.auth().createCustomToken(user.uid);
-            console.log('تم إنشاء توكن جديد:', newToken);
-            return { valid: false, newToken, uid: user.uid };
-        } catch (createError) {
-            console.log('خطأ في إنشاء توكن جديد:', createError.message);
-            return { valid: false, error: createError.message };
+            // فك تشفير التوكن القديم حتى لو كان منتهي الصلاحية
+            const decoded = jwt.decode(token);
+            if (!decoded || !decoded.uid) {
+                throw new Error('توكن غير صالح');
+            }
+
+            // إنشاء توكن جديد
+            const userRecord = await auth.getUser(decoded.uid);
+            const tokenData = {
+                uid: userRecord.uid,
+                email: userRecord.email,
+                name: userRecord.displayName
+            };
+            const newToken = jwt.sign(tokenData, process.env.JWT_SECRET, { expiresIn: '24h' });
+            console.log('تم إنشاء توكن جديد للمستخدم:', userRecord.uid);
+            
+            return { 
+                valid: false, 
+                newToken, 
+                uid: userRecord.uid,
+                user: userRecord
+            };
+        } catch (refreshError) {
+            console.error('خطأ في تجديد التوكن:', refreshError);
+            throw new Error('فشل في تجديد الجلسة');
         }
     }
 }
@@ -439,32 +456,40 @@ router.get('/api/auth/user', async (req, res) => {
                 }
             });
         } else if (tokenStatus.newToken) {
-            // إذا تم إنشاء توكن جديد، نقوم بتحديثه في الكوكيز
+            // تحديث التوكن في الكوكيز
             res.cookie('token', tokenStatus.newToken, {
                 httpOnly: true,
-                secure: true,
-                sameSite: 'strict',
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
                 maxAge: 24 * 60 * 60 * 1000
             });
             
-            const user = await auth.getUser(tokenStatus.uid);
+            // تحديث الجلسة في قاعدة البيانات
+            await db.collection('sessions').doc(tokenStatus.uid).set({
+                token: tokenStatus.newToken,
+                lastAccess: admin.firestore.FieldValue.serverTimestamp(),
+                userAgent: req.headers['user-agent'],
+                ipAddress: req.ip
+            });
+
             res.json({ 
                 success: true, 
                 user: {
-                    uid: user.uid,
-                    email: user.email,
-                    displayName: user.displayName
+                    uid: tokenStatus.user.uid,
+                    email: tokenStatus.user.email,
+                    displayName: tokenStatus.user.displayName
                 },
                 tokenRefreshed: true
             });
-        } else {
-            throw new Error(tokenStatus.error || 'فشل في التحقق من التوكن');
+            console.log('تم تجديد التوكن وإرسال البيانات بنجاح');
         }
     } catch (error) {
         console.error('خطأ في التحقق من المستخدم:', error);
         res.status(401).json({ 
             success: false, 
-            message: 'فشل في التحقق من المستخدم: ' + error.message 
+            message: 'فشل في التحقق من المستخدم: ' + error.message,
+            shouldRedirect: true
         });
     }
 });
