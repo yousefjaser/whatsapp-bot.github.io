@@ -1,113 +1,86 @@
 const admin = require('firebase-admin');
 
 /**
- * أنواع السجلات
+ * تسجيل رسالة معلومات
  */
-const LogTypes = {
-    INFO: 'info',
-    ERROR: 'error',
-    WARNING: 'warning',
-    AUTH: 'auth',
-    DEVICE: 'device',
-    MESSAGE: 'message',
-    ADMIN: 'admin'
-};
+function info(message, data = {}, userId = null) {
+    return saveLog('INFO', message, data, userId);
+}
 
 /**
- * إضافة سجل جديد
- * @param {string} type - نوع السجل
- * @param {string} message - الرسالة
- * @param {Object} data - بيانات إضافية
- * @param {string} [userId] - معرف المستخدم
+ * تسجيل رسالة خطأ
  */
-async function addLog(type, message, data = {}, userId = null) {
-    try {
-        if (!Object.values(LogTypes).includes(type)) {
-            console.warn('نوع السجل غير صالح:', type);
-            type = LogTypes.INFO;
-        }
+function error(message, data = {}, userId = null) {
+    return saveLog('ERROR', message, data, userId);
+}
 
+/**
+ * تسجيل رسالة تحذير
+ */
+function warning(message, data = {}, userId = null) {
+    return saveLog('WARNING', message, data, userId);
+}
+
+/**
+ * تسجيل حدث مصادقة
+ */
+function auth(message, data = {}, userId = null) {
+    return saveLog('AUTH', message, data, userId);
+}
+
+/**
+ * تسجيل حدث جهاز
+ */
+function device(message, data = {}, userId = null) {
+    return saveLog('DEVICE', message, data, userId);
+}
+
+/**
+ * تسجيل حدث رسالة
+ */
+function message(message, data = {}, userId = null) {
+    return saveLog('MESSAGE', message, data, userId);
+}
+
+/**
+ * تسجيل حدث مشرف
+ */
+function adminLog(message, data = {}, userId = null) {
+    return saveLog('ADMIN', message, data, userId);
+}
+
+/**
+ * حفظ السجل في قاعدة البيانات
+ */
+async function saveLog(type, message, data = {}, userId = null) {
+    try {
         const logData = {
             type,
             message,
             data,
             userId,
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            ip: data.ip || null,
-            userAgent: data.userAgent || null
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
         };
 
         await admin.firestore()
-            .collection('system_logs')
+            .collection('logs')
             .add(logData);
 
     } catch (error) {
-        console.error('خطأ في إضافة السجل:', error);
+        console.error('خطأ في حفظ السجل:', error);
     }
 }
 
 /**
- * إضافة سجل معلومات
+ * تنظيف السجلات القديمة
  */
-function info(message, data = {}, userId = null) {
-    return addLog(LogTypes.INFO, message, data, userId);
-}
-
-/**
- * إضافة سجل خطأ
- */
-function error(message, data = {}, userId = null) {
-    console.error(message, data);
-    return addLog(LogTypes.ERROR, message, data, userId);
-}
-
-/**
- * إضافة سجل تحذير
- */
-function warning(message, data = {}, userId = null) {
-    console.warn(message, data);
-    return addLog(LogTypes.WARNING, message, data, userId);
-}
-
-/**
- * إضافة سجل مصادقة
- */
-function auth(message, data = {}, userId = null) {
-    return addLog(LogTypes.AUTH, message, data, userId);
-}
-
-/**
- * إضافة سجل جهاز
- */
-function device(message, data = {}, userId = null) {
-    return addLog(LogTypes.DEVICE, message, data, userId);
-}
-
-/**
- * إضافة سجل رسالة
- */
-function message(message, data = {}, userId = null) {
-    return addLog(LogTypes.MESSAGE, message, data, userId);
-}
-
-/**
- * إضافة سجل مشرف
- */
-function admin(message, data = {}, userId = null) {
-    return addLog(LogTypes.ADMIN, message, data, userId);
-}
-
-/**
- * حذف السجلات القديمة
- * @param {number} days - عدد الأيام للاحتفاظ بالسجلات
- */
-async function cleanOldLogs(days = 30) {
+async function cleanOldLogs(maxAge = 30) {
     try {
         const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - days);
+        cutoffDate.setDate(cutoffDate.getDate() - maxAge);
 
         const snapshot = await admin.firestore()
-            .collection('system_logs')
+            .collection('logs')
             .where('timestamp', '<', cutoffDate)
             .get();
 
@@ -120,22 +93,17 @@ async function cleanOldLogs(days = 30) {
         console.log(`تم حذف ${snapshot.size} سجل قديم`);
 
     } catch (error) {
-        console.error('خطأ في حذف السجلات القديمة:', error);
+        console.error('خطأ في تنظيف السجلات القديمة:', error);
     }
 }
 
-/**
- * تصدير الدوال
- */
 module.exports = {
-    LogTypes,
-    addLog,
     info,
     error,
     warning,
     auth,
     device,
     message,
-    admin,
+    adminLog,
     cleanOldLogs
 }; 
