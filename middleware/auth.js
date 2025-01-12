@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 // قائمة المسارات المسموح بها بدون تسجيل دخول
 const publicPaths = [
     '/',
+    '/welcome.html',
     '/login',
     '/login.html',
     '/register',
@@ -19,14 +20,21 @@ const publicPaths = [
     '/js',
     '/images',
     '/favicon.ico',
-    '/public'
+    '/public',
+    '/404.html',
+    '/500.html'
 ];
 
 // التحقق من الجلسة
 const validateSession = async (req, res, next) => {
     try {
+        // تجاهل الملفات الثابتة
+        if (req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg)$/)) {
+            return next();
+        }
+
         // السماح بالوصول للمسارات العامة
-        if (publicPaths.some(path => req.path.startsWith(path))) {
+        if (publicPaths.some(path => req.path === path || req.path.startsWith(path + '/'))) {
             return next();
         }
 

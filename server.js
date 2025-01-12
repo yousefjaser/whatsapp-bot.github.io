@@ -47,24 +47,12 @@ app.use(session({
 const protectedPaths = [
     '/home.html',
     '/send.html',
-    '/docs.html',
-    '/api.html',
-    '/api/devices',
-    '/api/whatsapp'
+    '/profile.html'
 ];
 
-app.use(protectedPaths, (req, res, next) => {
-    if (!req.session || !req.session.userId) {
-        if (req.path.startsWith('/api/')) {
-            return res.status(401).json({
-                success: false,
-                error: 'غير مصرح بالوصول'
-            });
-        }
-        return res.redirect('/login.html');
-    }
-    next();
-});
+// استخدام middleware المصادقة
+const { validateSession } = require('./middleware/auth');
+app.use(validateSession);
 
 // تضمين المسارات
 const authRoutes = require('./routes/auth');
@@ -72,14 +60,17 @@ const devicesRoutes = require('./routes/devices');
 const whatsappRoutes = require('./routes/whatsapp');
 const apiRoutes = require('./routes/api');
 
+// تكوين المسارات الثابتة
+app.use(express.static('public', {
+    index: false,
+    extensions: ['html']
+}));
+
+// تكوين المسارات
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api', apiRoutes);
-
-// تكوين المسارات الثابتة
-app.use(express.static('public'));
-app.use('/public', express.static('public'));
 
 // التوجيه الرئيسي
 app.get('/', (req, res) => {
