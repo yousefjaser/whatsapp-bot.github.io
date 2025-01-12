@@ -8,6 +8,9 @@ const qrcode = require('qrcode');
 // تخزين مؤقت لرموز QR
 const qrCodes = new Map();
 
+// تخزين مؤقت للعملاء
+const clients = new Map();
+
 // إضافة جهاز جديد
 router.post('/add', validateSession, async (req, res) => {
     try {
@@ -54,13 +57,31 @@ router.post('/add', validateSession, async (req, res) => {
         // إنشاء عميل WhatsApp جديد
         const client = new Client({
             puppeteer: {
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            }
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--disable-gpu'
+                ],
+                executablePath: process.env.CHROME_BIN || null
+            },
+            qrMaxRetries: 5,
+            authTimeoutMs: 60000,
+            restartOnAuthFail: true
         });
+
+        // تخزين العميل في الذاكرة المؤقتة
+        clients.set(deviceRef.id, client);
 
         // الاستماع لحدث QR
         client.on('qr', async (qr) => {
             try {
+                console.log('تم استلام رمز QR جديد للجهاز:', deviceRef.id);
+                
                 // تحويل نص QR إلى صورة base64
                 const qrImage = await qrcode.toDataURL(qr);
                 
@@ -70,46 +91,52 @@ router.post('/add', validateSession, async (req, res) => {
                 // تحديث حالة الجهاز
                 await deviceRef.update({
                     status: 'awaiting_scan',
-                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
+                    'metadata.qrRetries': admin.firestore.FieldValue.increment(1)
                 });
             } catch (error) {
-                console.error('خطأ في إنشاء رمز QR:', error);
-                // لا نرسل استجابة هنا لأن الاتصال قد يكون مغلقاً
-            }
-        });
-
-        // الاستماع لحدث الاتصال
-        client.on('ready', async () => {
-            try {
-                // تحديث حالة الجهاز عند الاتصال
-                await deviceRef.update({
-                    status: 'connected',
-                    lastConnection: admin.firestore.FieldValue.serverTimestamp(),
-                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
-                });
-                
-                // حذف رمز QR من التخزين المؤقت
-                qrCodes.delete(deviceRef.id);
-            } catch (error) {
-                console.error('خطأ في تحديث حالة الاتصال:', error);
+                console.error('خطأ في إنشاء رمز QR للجهاز:', deviceRef.id, error);
+                await handleDeviceError(deviceRef, error);
             }
         });
 
         // الاستماع لحدث الخطأ
         client.on('auth_failure', async (error) => {
+            console.error('فشل المصادقة للجهاز:', deviceRef.id, error);
+            await handleDeviceError(deviceRef, error);
+        });
+
+        // الاستماع لحدث قطع الاتصال
+        client.on('disconnected', async (reason) => {
+            console.log('تم قطع الاتصال للجهاز:', deviceRef.id, reason);
             try {
                 await deviceRef.update({
-                    status: 'error',
-                    'metadata.lastError': error.message,
+                    status: 'disconnected',
+                    'metadata.lastError': reason,
                     'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
                 });
-            } catch (err) {
-                console.error('خطأ في تحديث حالة الخطأ:', err);
+                
+                // إزالة رمز QR والعميل من الذاكرة
+                qrCodes.delete(deviceRef.id);
+                const oldClient = clients.get(deviceRef.id);
+                if (oldClient) {
+                    await oldClient.destroy();
+                    clients.delete(deviceRef.id);
+                }
+            } catch (error) {
+                console.error('خطأ في معالجة قطع الاتصال:', error);
             }
         });
 
-        // بدء العميل
-        await client.initialize();
+        // محاولة بدء العميل
+        try {
+            console.log('بدء تهيئة العميل للجهاز:', deviceRef.id);
+            await client.initialize();
+        } catch (error) {
+            console.error('خطأ في تهيئة العميل:', error);
+            await handleDeviceError(deviceRef, error);
+            throw error;
+        }
 
         res.json({
             success: true,
@@ -324,5 +351,18 @@ router.get('/session/:deviceId', validateSession, async (req, res) => {
         });
     }
 });
+
+// دالة مساعدة لمعالجة الأخطاء
+async function handleDeviceError(deviceRef, error) {
+    try {
+        await deviceRef.update({
+            status: 'error',
+            'metadata.lastError': error.message || 'خطأ غير معروف',
+            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (err) {
+        console.error('خطأ في تحديث حالة الخطأ:', err);
+    }
+}
 
 module.exports = router; 

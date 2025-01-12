@@ -125,6 +125,19 @@
             background-color: rgba(255, 193, 7, 0.1);
             color: #ffc107;
         }
+
+        .qr-code {
+            max-width: 300px;
+            margin: 0 auto;
+            border: 8px solid white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .modal-body {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -267,6 +280,8 @@
         const socket = io();
         let qrCheckInterval;
         let statusCheckInterval;
+        let qrRetries = 0;
+        const MAX_QR_RETRIES = 5;
 
         // التحقق من الوضع المظلم
         function initTheme() {
@@ -468,6 +483,16 @@
                     // إزالة رسالة التحميل
                     loadingMessage.remove();
                     
+                    // تهيئة حاوية QR
+                    document.getElementById('qrContainer').innerHTML = `
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">جاري إنشاء رمز QR...</span>
+                            </div>
+                            <p>جاري إنشاء رمز QR...</p>
+                        </div>
+                    `;
+                    
                     // بدء فحص رمز QR
                     startQRCheck(data.deviceId);
                     
@@ -479,6 +504,12 @@
             } catch (error) {
                 console.error('خطأ في إضافة جهاز:', error);
                 showError(error.message || 'حدث خطأ في إضافة الجهاز');
+                
+                // إزالة رسالة التحميل إذا كانت موجودة
+                const loadingMessage = document.querySelector('.modal-body .spinner-border')?.parentElement;
+                if (loadingMessage) {
+                    loadingMessage.remove();
+                }
             }
         }
 
@@ -488,22 +519,36 @@
                 clearInterval(qrCheckInterval);
             }
 
+            qrRetries = 0;
+            
             // فحص رمز QR كل 2 ثانية
             qrCheckInterval = setInterval(async () => {
                 try {
+                    if (qrRetries >= MAX_QR_RETRIES) {
+                        clearInterval(qrCheckInterval);
+                        showError('تجاوز الحد الأقصى لمحاولات إنشاء رمز QR. يرجى المحاولة مرة أخرى.');
+                        return;
+                    }
+
                     const response = await fetch(`/api/devices/qr/${deviceId}`);
                     const data = await response.json();
 
                     if (data.success && data.qrCode) {
+                        qrRetries = 0;
                         // عرض رمز QR
                         document.getElementById('qrContainer').innerHTML = `
-                            <img src="${data.qrCode}" class="img-fluid" alt="رمز QR">
-                            <p class="text-center mt-2">امسح رمز QR باستخدام تطبيق واتساب</p>
+                            <div class="text-center">
+                                <img src="${data.qrCode}" class="img-fluid qr-code" alt="رمز QR">
+                                <p class="mt-3">امسح رمز QR باستخدام تطبيق واتساب</p>
+                                <small class="text-muted">سيتم تحديث الرمز تلقائياً إذا انتهت صلاحيته</small>
+                            </div>
                         `;
+                    } else {
+                        qrRetries++;
                     }
                 } catch (error) {
                     console.error('خطأ في جلب رمز QR:', error);
-                    // لا نظهر رسالة خطأ هنا لأن الفحص مستمر
+                    qrRetries++;
                 }
             }, 2000);
         }
@@ -523,22 +568,28 @@
                     if (data.success) {
                         const device = data.devices.find(d => d.id === deviceId);
                         
-                        if (device && device.status === 'connected') {
-                            // إيقاف الفحص عند الاتصال
-                            clearInterval(qrCheckInterval);
-                            clearInterval(statusCheckInterval);
+                        if (device) {
+                            if (device.status === 'connected') {
+                                // إيقاف الفحص عند الاتصال
+                                clearInterval(qrCheckInterval);
+                                clearInterval(statusCheckInterval);
 
-                            // عرض معلومات الحساب
-                            showSuccess('تم الاتصال بنجاح!');
-                            
-                            // تحديث قائمة الأجهزة
-                            loadDevices();
-                            
-                            // إغلاق المودال بعد 3 ثواني
-                            setTimeout(() => {
-                                const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
-                                modal.hide();
-                            }, 3000);
+                                // عرض رسالة النجاح
+                                showSuccess('تم الاتصال بنجاح! جاري إغلاق النافذة...');
+                                
+                                // تحديث قائمة الأجهزة
+                                loadDevices();
+                                
+                                // إغلاق المودال بعد 3 ثواني
+                                setTimeout(() => {
+                                    const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
+                                    modal.hide();
+                                }, 3000);
+                            } else if (device.status === 'error') {
+                                clearInterval(qrCheckInterval);
+                                clearInterval(statusCheckInterval);
+                                showError('حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.');
+                            }
                         }
                     }
                 } catch (error) {
@@ -571,6 +622,9 @@
         document.getElementById('deviceModal').addEventListener('hidden.bs.modal', () => {
             if (qrCheckInterval) clearInterval(qrCheckInterval);
             if (statusCheckInterval) clearInterval(statusCheckInterval);
+            
+            // إعادة تعيين حاوية QR
+            document.getElementById('qrContainer').innerHTML = '';
         });
     </script>
 </body>
