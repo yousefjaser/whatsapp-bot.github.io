@@ -68,9 +68,9 @@ app.use(express.static('public', {
 
 // تكوين المسارات
 app.use('/api/auth', authRoutes);
-app.use('/api/devices', devicesRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api', apiRoutes);
+app.use('/api/v1', apiRoutes);
+app.use('/api/devices', validateSession, devicesRoutes);
+app.use('/api/whatsapp', validateSession, whatsappRoutes);
 
 // التوجيه الرئيسي
 app.get('/', (req, res) => {
@@ -83,7 +83,7 @@ app.get('/', (req, res) => {
 
 // معالجة الصفحات غير الموجودة
 app.use((req, res) => {
-    if (req.path.startsWith('/api/')) {
+    if (req.xhr || req.path.startsWith('/api/')) {
         return res.status(404).json({
             success: false,
             error: 'المسار غير موجود'
@@ -96,30 +96,10 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
     console.error('خطأ:', err);
 
-    // التحقق من نوع الخطأ
-    if (err.name === 'SessionError') {
-        return res.redirect('/login.html');
-    }
-
-    if (err.name === 'FirebaseError') {
+    if (req.xhr || req.path.startsWith('/api/')) {
         return res.status(500).json({
             success: false,
-            error: 'حدث خطأ في الاتصال بقاعدة البيانات'
-        });
-    }
-
-    if (err.name === 'SyntaxError' && err.type === 'entity.parse.failed') {
-        return res.status(400).json({
-            success: false,
-            error: 'بيانات غير صالحة'
-        });
-    }
-
-    // التحقق من نوع الطلب
-    if (req.path.startsWith('/api/')) {
-        return res.status(500).json({
-            success: false,
-            error: 'حدث خطأ في الخادم'
+            error: err.message || 'حدث خطأ في الخادم'
         });
     }
     
