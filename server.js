@@ -30,7 +30,7 @@ app.use(cookieParser());
 
 // إعداد الجلسات
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -39,26 +39,28 @@ app.use(session({
         sameSite: 'strict',
         maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
     },
-    name: 'sessionId' // تغيير اسم الكوكي
+    name: 'sessionId'
 }));
 
 // التحقق من المصادقة لجميع المسارات المحمية
-app.use('/api/devices', (req, res, next) => {
-    if (!req.session.userId) {
-        return res.status(401).json({
-            success: false,
-            error: 'غير مصرح بالوصول'
-        });
-    }
-    next();
-});
+const protectedPaths = [
+    '/home.html',
+    '/send.html',
+    '/docs.html',
+    '/api.html',
+    '/api/devices',
+    '/api/whatsapp'
+];
 
-app.use('/api/whatsapp', (req, res, next) => {
-    if (!req.session.userId) {
-        return res.status(401).json({
-            success: false,
-            error: 'غير مصرح بالوصول'
-        });
+app.use(protectedPaths, (req, res, next) => {
+    if (!req.session || !req.session.userId) {
+        if (req.path.startsWith('/api/')) {
+            return res.status(401).json({
+                success: false,
+                error: 'غير مصرح بالوصول'
+            });
+        }
+        return res.redirect('/login.html');
     }
     next();
 });
@@ -77,29 +79,38 @@ app.use('/api/v1', apiRoutes);
 // تقديم الملفات الثابتة
 app.use(express.static('public'));
 
-// معالجة الصفحات غير الموجودة
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        error: 'الصفحة غير موجودة'
-    });
-});
-
-// معالجة الأخطاء
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({
-        success: false,
-        error: 'حدث خطأ في الخادم'
-    });
-});
-
+// التوجيه الرئيسي
 app.get('/', (req, res) => {
     if (req.session && req.session.userId) {
         res.redirect('/home.html');
     } else {
         res.redirect('/welcome.html');
     }
+});
+
+// معالجة الصفحات غير الموجودة
+app.use((req, res) => {
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({
+            success: false,
+            error: 'المسار غير موجود'
+        });
+    }
+    res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+});
+
+// معالجة الأخطاء
+app.use((err, req, res, next) => {
+    console.error('خطأ:', err);
+    
+    if (req.path.startsWith('/api/')) {
+        return res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في الخادم'
+        });
+    }
+    
+    res.status(500).sendFile(path.join(__dirname, 'public', '500.html'));
 });
 
 // بدء الخادم

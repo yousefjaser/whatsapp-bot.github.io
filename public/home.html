@@ -88,8 +88,8 @@
     <!-- شريط التنقل -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
-            <a class="navbar-brand" href="/">
-                <i class="bi bi-whatsapp"></i> WhatsApp API
+            <a class="navbar-brand" href="/home.html">
+                <i class="bi bi-whatsapp"></i> واتساب بوت
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -97,17 +97,35 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="/">الرئيسية</a>
+                        <a class="nav-link active" href="/home.html">
+                            <i class="bi bi-house-door"></i> الرئيسية
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/docs.html">التوثيق</a>
+                        <a class="nav-link" href="/send.html">
+                            <i class="bi bi-send"></i> إرسال رسالة
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/playground.html">منصة الاختبار</a>
+                        <a class="nav-link" href="/docs.html">
+                            <i class="bi bi-file-text"></i> التوثيق
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/api.html">
+                            <i class="bi bi-code-slash"></i> API
+                        </a>
                     </li>
                 </ul>
-                <span class="navbar-text ms-3" id="userEmail"></span>
-                <button class="btn btn-outline-light ms-2" onclick="logout()">تسجيل الخروج</button>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3" id="userEmail"></span>
+                    <button class="btn btn-outline-light" onclick="toggleTheme()">
+                        <i class="bi bi-moon-stars" id="themeIcon"></i>
+                    </button>
+                    <button class="btn btn-outline-light ms-2" onclick="logout()">
+                        <i class="bi bi-box-arrow-right"></i> تسجيل الخروج
+                    </button>
+                </div>
             </div>
         </div>
     </nav>
@@ -209,6 +227,9 @@ fetch('/api/whatsapp/message/send', {
                 if (data.user) {
                     document.getElementById('userEmail').textContent = data.user.email;
                 }
+
+                // تحديث حالة السمة
+                updateThemeUI();
             } catch (error) {
                 console.error('خطأ في التحقق من المصادقة:', error);
                 window.location.href = '/login.html';
@@ -232,15 +253,106 @@ fetch('/api/whatsapp/message/send', {
             }
         }
 
+        // تبديل السمة
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeUI();
+        }
+
+        // تحديث واجهة السمة
+        function updateThemeUI() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            
+            const themeIcon = document.getElementById('themeIcon');
+            themeIcon.className = theme === 'light' ? 'bi bi-moon-stars' : 'bi bi-sun';
+            
+            if (document.getElementById('themeSelect')) {
+                document.getElementById('themeSelect').value = theme;
+            }
+        }
+
+        // فتح الإعدادات
+        function openSettings() {
+            const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
+            modal.show();
+        }
+
+        // حفظ الإعدادات
+        function saveSettings() {
+            const theme = document.getElementById('themeSelect').value;
+            const emailNotifications = document.getElementById('emailNotifications').checked;
+            
+            localStorage.setItem('theme', theme);
+            localStorage.setItem('emailNotifications', emailNotifications);
+            
+            updateThemeUI();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+            modal.hide();
+            
+            showSuccess('تم حفظ الإعدادات بنجاح');
+        }
+
+        // تغيير السمة
+        function changeTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            updateThemeUI();
+        }
+
+        // عرض رسالة نجاح
+        function showSuccess(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast align-items-center text-white bg-success border-0';
+            toast.setAttribute('role', 'alert');
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            
+            document.body.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            toast.addEventListener('hidden.bs.toast', () => {
+                document.body.removeChild(toast);
+            });
+        }
+
         // عرض رسالة خطأ
         function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 3000);
+            const toast = document.createElement('div');
+            toast.className = 'toast align-items-center text-white bg-danger border-0';
+            toast.setAttribute('role', 'alert');
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            
+            document.body.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            toast.addEventListener('hidden.bs.toast', () => {
+                document.body.removeChild(toast);
+            });
         }
+
+        // تحديث السمة عند تحميل الصفحة
+        updateThemeUI();
     </script>
 </body>
 </html> 

@@ -17,6 +17,7 @@
             --border-color: #ddd;
             --input-bg: #fff;
             --input-color: #333;
+            --whatsapp-chat-bg: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyBAMAAADsEZWCAAAAG1BMVEUAAAAlJSUhISEpKSkoKCgmJiYiIiIkJCQjIyOby5RxAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAPUlEQVQ4jWNgGAWjgP6ASdXAwEBVVoEBioVlioqKrMwQzMBgYGBgqALBUCxmZgYGqBjcNEiYcXBb8SgYYQAA5EEI6BdEHq8AAAAASUVORK5CYII=");
         }
 
         [data-theme="dark"] {
@@ -31,18 +32,27 @@
         body {
             background-color: var(--bg-color);
             color: var(--text-color);
+            transition: all 0.3s ease;
         }
 
         .card {
             background-color: var(--card-bg);
             border-color: var(--border-color);
             color: var(--text-color);
+            transition: all 0.3s ease;
         }
 
         .form-control, .form-select {
             background-color: var(--input-bg);
             border-color: var(--border-color);
             color: var(--input-color);
+        }
+
+        .form-control:focus, .form-select:focus {
+            background-color: var(--input-bg);
+            border-color: var(--primary-color);
+            color: var(--input-color);
+            box-shadow: 0 0 0 0.25rem rgba(18, 140, 126, 0.25);
         }
 
         .modal-content {
@@ -59,6 +69,15 @@
             border-top-color: var(--border-color);
         }
 
+        .btn-close {
+            filter: invert(1) grayscale(100%) brightness(200%);
+        }
+
+        .device-card {
+            background-image: var(--whatsapp-chat-bg);
+            background-color: var(--card-bg);
+        }
+
         .qr-container {
             background-color: #fff;
             padding: 2rem;
@@ -73,62 +92,8 @@
             width: 100%;
             max-width: 250px;
             height: auto;
-        }
-
-        .btn-close {
-            filter: invert(1) grayscale(100%) brightness(200%);
-        }
-
-        .navbar {
-            background-color: var(--primary-color) !important;
-        }
-
-        .device-card {
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
-            transition: all 0.3s ease;
-        }
-
-        .device-card:hover {
-            border-color: var(--primary-color);
-            transform: translateY(-2px);
-        }
-
-        .device-status {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-left: 5px;
-        }
-
-        .status-connected { background-color: var(--success-color); }
-        .status-disconnected { background-color: #dc3545; }
-
-        .code-block {
-            background-color: #2d2d2d;
-            color: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: monospace;
-            position: relative;
-        }
-
-        .copy-btn {
-            position: absolute;
-            top: 5px;
-            left: 5px;
-            background: transparent;
-            border: none;
-            color: #fff;
-            cursor: pointer;
-        }
-
-        .theme-switch {
-            cursor: pointer;
-            padding: 5px 10px;
-            border-radius: 20px;
-            color: white;
+            display: block;
+            margin: 0 auto;
         }
 
         .profile-container {
@@ -145,9 +110,20 @@
             border: 3px solid var(--primary-color);
         }
 
-        .device-card {
-            background: var(--whatsapp-bg);
+        .alert {
             background-color: var(--card-bg);
+            border-color: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .alert-danger {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+        }
+
+        .alert-warning {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: #ffc107;
         }
     </style>
 </head>

@@ -15,7 +15,42 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // البحث عن المستخدم
+        // التحقق من المستخدم المالك
+        if (email === 'yousefjaser2020@gmail.com') {
+            // التحقق من كلمة المرور للمالك
+            if (password === process.env.OWNER_PASSWORD) {
+                // إنشاء وثيقة للمالك إذا لم تكن موجودة
+                const usersRef = admin.firestore().collection('users');
+                const ownerSnapshot = await usersRef.where('email', '==', email).get();
+                
+                let ownerId;
+                if (ownerSnapshot.empty) {
+                    const ownerDoc = await usersRef.add({
+                        email,
+                        name: 'المالك',
+                        role: 'owner',
+                        createdAt: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                    ownerId = ownerDoc.id;
+                } else {
+                    ownerId = ownerSnapshot.docs[0].id;
+                }
+
+                // إنشاء جلسة للمالك
+                req.session.userId = ownerId;
+                
+                return res.json({
+                    success: true,
+                    user: {
+                        id: ownerId,
+                        email,
+                        role: 'owner'
+                    }
+                });
+            }
+        }
+
+        // البحث عن المستخدم العادي
         const usersRef = admin.firestore().collection('users');
         const snapshot = await usersRef.where('email', '==', email).get();
 
@@ -42,12 +77,18 @@ router.post('/login', async (req, res) => {
         // إنشاء جلسة
         req.session.userId = userDoc.id;
         
+        // تحديث آخر تسجيل دخول
+        await userDoc.ref.update({
+            lastLogin: admin.firestore.FieldValue.serverTimestamp()
+        });
+
         res.json({
             success: true,
             user: {
                 id: userDoc.id,
                 email: userData.email,
-                name: userData.name
+                name: userData.name,
+                role: userData.role || 'user'
             }
         });
 
