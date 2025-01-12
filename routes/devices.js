@@ -11,6 +11,19 @@ const qrCodes = new Map();
 // تخزين مؤقت للعملاء
 const clients = new Map();
 
+// دالة مساعدة لمعالجة الأخطاء
+async function handleDeviceError(deviceRef, error) {
+    try {
+        await deviceRef.update({
+            status: 'error',
+            'metadata.lastError': error.message || 'خطأ غير معروف',
+            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (err) {
+        console.error('خطأ في تحديث حالة الخطأ:', err);
+    }
+}
+
 // إضافة جهاز جديد
 router.post('/add', validateSession, async (req, res) => {
     try {
@@ -125,6 +138,28 @@ router.post('/add', validateSession, async (req, res) => {
                 }
             } catch (error) {
                 console.error('خطأ في معالجة قطع الاتصال:', error);
+            }
+        });
+
+        // الاستماع لحدث الاتصال
+        client.on('ready', async () => {
+            try {
+                console.log('تم الاتصال بنجاح للجهاز:', deviceRef.id);
+                
+                // تحديث حالة الجهاز
+                await deviceRef.update({
+                    status: 'connected',
+                    lastConnection: admin.firestore.FieldValue.serverTimestamp(),
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
+                    'metadata.connectedAt': admin.firestore.FieldValue.serverTimestamp()
+                });
+
+                // إزالة رمز QR من الذاكرة المؤقتة
+                qrCodes.delete(deviceRef.id);
+
+            } catch (error) {
+                console.error('خطأ في تحديث حالة الاتصال:', error);
+                await handleDeviceError(deviceRef, error);
             }
         });
 
@@ -405,40 +440,5 @@ router.post('/:deviceId/disconnect', validateSession, async (req, res) => {
         });
     }
 });
-
-// تحسين معالجة الأحداث في إضافة جهاز جديد
-client.on('ready', async () => {
-    try {
-        console.log('تم الاتصال بنجاح للجهاز:', deviceRef.id);
-        
-        // تحديث حالة الجهاز
-        await deviceRef.update({
-            status: 'connected',
-            lastConnection: admin.firestore.FieldValue.serverTimestamp(),
-            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
-            'metadata.connectedAt': admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        // إزالة رمز QR من الذاكرة المؤقتة
-        qrCodes.delete(deviceRef.id);
-
-    } catch (error) {
-        console.error('خطأ في تحديث حالة الاتصال:', error);
-        await handleDeviceError(deviceRef, error);
-    }
-});
-
-// دالة مساعدة لمعالجة الأخطاء
-async function handleDeviceError(deviceRef, error) {
-    try {
-        await deviceRef.update({
-            status: 'error',
-            'metadata.lastError': error.message || 'خطأ غير معروف',
-            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
-        });
-    } catch (err) {
-        console.error('خطأ في تحديث حالة الخطأ:', err);
-    }
-}
 
 module.exports = router; 
