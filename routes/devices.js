@@ -12,14 +12,35 @@ const qrCodes = new Map();
 router.post('/add', validateSession, async (req, res) => {
     try {
         const { name } = req.body;
+        if (!name || typeof name !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'يجب توفير اسم صحيح للجهاز'
+            });
+        }
+
         const userId = req.session.userId;
+        
+        // التحقق من عدد الأجهزة النشطة للمستخدم
+        const activeDevices = await admin.firestore()
+            .collection('devices')
+            .where('userId', '==', userId)
+            .where('isActive', '==', true)
+            .get();
+
+        if (activeDevices.size >= 5) {
+            return res.status(400).json({
+                success: false,
+                error: 'لا يمكن إضافة أكثر من 5 أجهزة نشطة'
+            });
+        }
 
         // إنشاء وثيقة جديدة في مجموعة الأجهزة
         const deviceRef = await admin.firestore().collection('devices').add({
-            name: name || 'جهاز جديد',
+            name: name.trim(),
             userId,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            status: 'pending',
+            status: 'initializing',
             lastConnection: null,
             isActive: true,
             sessionData: null,
@@ -33,7 +54,7 @@ router.post('/add', validateSession, async (req, res) => {
         // إنشاء عميل WhatsApp جديد
         const client = new Client({
             puppeteer: {
-                args: ['--no-sandbox']
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
             }
         });
 
@@ -42,15 +63,18 @@ router.post('/add', validateSession, async (req, res) => {
             try {
                 // تحويل نص QR إلى صورة base64
                 const qrImage = await qrcode.toDataURL(qr);
+                
+                // تخزين رمز QR في الذاكرة المؤقتة
                 qrCodes.set(deviceRef.id, qrImage);
                 
                 // تحديث حالة الجهاز
                 await deviceRef.update({
-                    qrCode: qrImage,
-                    status: 'awaiting_scan'
+                    status: 'awaiting_scan',
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
                 });
             } catch (error) {
                 console.error('خطأ في إنشاء رمز QR:', error);
+                // لا نرسل استجابة هنا لأن الاتصال قد يكون مغلقاً
             }
         });
 
@@ -61,7 +85,7 @@ router.post('/add', validateSession, async (req, res) => {
                 await deviceRef.update({
                     status: 'connected',
                     lastConnection: admin.firestore.FieldValue.serverTimestamp(),
-                    qrCode: null
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
                 });
                 
                 // حذف رمز QR من التخزين المؤقت
@@ -71,8 +95,21 @@ router.post('/add', validateSession, async (req, res) => {
             }
         });
 
+        // الاستماع لحدث الخطأ
+        client.on('auth_failure', async (error) => {
+            try {
+                await deviceRef.update({
+                    status: 'error',
+                    'metadata.lastError': error.message,
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (err) {
+                console.error('خطأ في تحديث حالة الخطأ:', err);
+            }
+        });
+
         // بدء العميل
-        client.initialize();
+        await client.initialize();
 
         res.json({
             success: true,

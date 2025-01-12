@@ -440,38 +440,45 @@
                 const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
                 modal.show();
 
-                // إعادة تعيين حالة المودال
-                document.getElementById('qrContainer').style.display = 'block';
-                document.getElementById('profileContainer').style.display = 'none';
+                // إظهار رسالة التحميل
+                const loadingMessage = document.createElement('div');
+                loadingMessage.className = 'text-center mb-3';
+                loadingMessage.innerHTML = `
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">جاري التحميل...</span>
+                    </div>
+                    <p class="mt-2">جاري إنشاء جهاز جديد...</p>
+                `;
+                document.querySelector('.modal-body').prepend(loadingMessage);
 
-                // إضافة جهاز جديد
+                // إرسال طلب إضافة جهاز جديد
                 const response = await fetch('/api/devices/add', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        name: 'جهاز جديد'
+                        name: 'جهاز جديد ' + new Date().toLocaleTimeString('ar-SA')
                     })
                 });
 
                 const data = await response.json();
-                
-                if (!data.success) {
+
+                if (data.success) {
+                    // إزالة رسالة التحميل
+                    loadingMessage.remove();
+                    
+                    // بدء فحص رمز QR
+                    startQRCheck(data.deviceId);
+                    
+                    // بدء فحص حالة الاتصال
+                    startStatusCheck(data.deviceId);
+                } else {
                     throw new Error(data.error || 'حدث خطأ في إضافة الجهاز');
                 }
-
-                const deviceId = data.deviceId;
-
-                // بدء فحص رمز QR
-                startQRCheck(deviceId);
-                
-                // بدء فحص حالة الاتصال
-                startStatusCheck(deviceId);
-
             } catch (error) {
-                console.error('خطأ:', error);
-                showError(error.message);
+                console.error('خطأ في إضافة جهاز:', error);
+                showError(error.message || 'حدث خطأ في إضافة الجهاز');
             }
         }
 
@@ -489,14 +496,14 @@
 
                     if (data.success && data.qrCode) {
                         // عرض رمز QR
-                        const qrContainer = document.getElementById('qrContainer');
-                        qrContainer.innerHTML = `
-                            <img src="${data.qrCode}" alt="رمز QR" class="img-fluid">
-                            <p class="mt-3 mb-0">امسح رمز QR باستخدام تطبيق واتساب</p>
+                        document.getElementById('qrContainer').innerHTML = `
+                            <img src="${data.qrCode}" class="img-fluid" alt="رمز QR">
+                            <p class="text-center mt-2">امسح رمز QR باستخدام تطبيق واتساب</p>
                         `;
                     }
                 } catch (error) {
                     console.error('خطأ في جلب رمز QR:', error);
+                    // لا نظهر رسالة خطأ هنا لأن الفحص مستمر
                 }
             }, 2000);
         }

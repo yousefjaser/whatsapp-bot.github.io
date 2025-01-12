@@ -16,12 +16,12 @@ router.post('/login', async (req, res) => {
         }
 
         // التحقق من المستخدم المالك
-        if (email === 'yousefjaser2020@gmail.com') {
+        if (email.toLowerCase() === 'yousefjaser2020@gmail.com') {
             // التحقق من كلمة المرور للمالك
             if (password === process.env.OWNER_PASSWORD) {
                 // إنشاء وثيقة للمالك إذا لم تكن موجودة
                 const usersRef = admin.firestore().collection('users');
-                const ownerSnapshot = await usersRef.where('email', '==', email).get();
+                const ownerSnapshot = await usersRef.where('email', '==', email.toLowerCase()).get();
                 
                 let ownerId;
                 if (ownerSnapshot.empty) {
