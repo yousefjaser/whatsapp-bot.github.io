@@ -68,11 +68,45 @@ const protectedFiles = [
     '/profile.html'
 ];
 
+// المسارات التي تتطلب تسجيل الدخول
+const authRequiredFiles = [
+    '/api-dashboard.html',
+    '/docs.html',
+    '/api-docs.html'
+];
+
 // middleware للتحقق من المسارات المحمية
 app.use((req, res, next) => {
-    if (protectedFiles.includes(req.path)) {
+    const path = req.path;
+    console.log('التحقق من المسار:', path);
+
+    // تجاهل الملفات الثابتة
+    if (path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg)$/)) {
+        return next();
+    }
+
+    // تجاهل المسارات العامة
+    if (path === '/' || path === '/welcome.html' || path === '/login.html' || path === '/register.html') {
+        return next();
+    }
+
+    // التحقق من حالة المستخدم
+    if (!req.session || !req.session.userId) {
+        console.log('مستخدم غير مسجل يحاول الوصول إلى:', path);
+        return res.redirect('/login.html?redirect=' + encodeURIComponent(path));
+    }
+
+    // المسارات المحمية تتطلب التحقق الكامل
+    if (protectedFiles.includes(path)) {
         return validateSession(req, res, next);
     }
+
+    // المسارات التي تتطلب تسجيل الدخول فقط
+    if (authRequiredFiles.includes(path)) {
+        console.log('مستخدم مسجل يحاول الوصول إلى:', path);
+        return next();
+    }
+
     next();
 });
 
