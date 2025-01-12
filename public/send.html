@@ -255,9 +255,12 @@
                     <h5 class="modal-title">إضافة جهاز جديد</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body text-center">
                     <div id="qrContainer" class="qr-container">
-                        <!-- سيتم تعبئة هذا القسم بواسطة JavaScript -->
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">جاري التحميل...</span>
+                        </div>
+                        <p class="mb-0">جاري تحضير رمز QR...</p>
                     </div>
                     <div id="profileContainer" class="profile-container" style="display: none;">
                         <img id="profileImage" class="profile-image" src="" alt="الصورة الشخصية">
@@ -294,11 +297,6 @@
         // إضافة جهاز جديد
         async function addNewDevice() {
             try {
-                const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
-                modal.show();
-                
-                showLoading('جاري إضافة جهاز جديد...');
-                
                 const response = await fetch('/api/devices/add', {
                     method: 'POST',
                     headers: {
@@ -313,9 +311,6 @@
                 
                 if (data.success) {
                     currentDeviceId = data.deviceId;
-                    hideLoading();
-                    document.getElementById('qrContainer').style.display = 'block';
-                    showMessage('success', 'تم إنشاء الجهاز بنجاح. في انتظار مسح رمز QR...');
                     startQRCheck(currentDeviceId);
                     startStatusCheck(currentDeviceId);
                 } else {
@@ -323,11 +318,8 @@
                 }
             } catch (error) {
                 console.error('خطأ:', error);
-                hideLoading();
                 showError(error.message || 'حدث خطأ في إضافة الجهاز');
-                // إعادة تعيين الحالة
                 clearIntervals();
-                document.getElementById('qrContainer').style.display = 'none';
             }
         }
 
@@ -595,12 +587,15 @@
             
             const checkQR = async () => {
                 try {
+                    console.log('جاري التحقق من رمز QR للجهاز:', deviceId);
                     const response = await fetch(`/api/devices/qr/${deviceId}`);
                     if (!response.ok) {
                         throw new Error('فشل في جلب رمز QR');
                     }
                     
                     const data = await response.json();
+                    console.log('استجابة QR:', data);
+                    
                     if (data.success && data.qrCode) {
                         document.getElementById('qrContainer').innerHTML = `
                             <div class="qr-code">
@@ -610,11 +605,16 @@
                             <p class="text-center text-muted small">يرجى فتح واتساب > القائمة > الأجهزة المرتبطة > ربط جهاز</p>
                         `;
                     } else {
-                        showError('لم يتم العثور على رمز QR');
+                        console.log('لم يتم العثور على رمز QR في الاستجابة');
                     }
                 } catch (error) {
                     console.error('خطأ في جلب رمز QR:', error);
-                    showError('فشل في جلب رمز QR');
+                    document.getElementById('qrContainer').innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            فشل في جلب رمز QR: ${error.message}
+                        </div>
+                    `;
                 }
             };
 

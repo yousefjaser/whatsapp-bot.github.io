@@ -251,11 +251,14 @@ router.get('/qr/:deviceId', validateSession, async (req, res) => {
         const { deviceId } = req.params;
         const userId = req.session.userId;
 
+        console.log('طلب رمز QR للجهاز:', deviceId);
+
         // التحقق من ملكية الجهاز
         const deviceRef = admin.firestore().collection('devices').doc(deviceId);
         const device = await deviceRef.get();
 
         if (!device.exists || device.data().userId !== userId) {
+            console.log('غير مصرح بالوصول للجهاز:', deviceId);
             return res.status(403).json({
                 success: false,
                 error: 'غير مصرح بالوصول لهذا الجهاز'
@@ -264,6 +267,7 @@ router.get('/qr/:deviceId', validateSession, async (req, res) => {
 
         // الحصول على رمز QR من التخزين المؤقت
         const qrCode = qrCodes.get(deviceId);
+        console.log('حالة رمز QR:', qrCode ? 'موجود' : 'غير موجود');
         
         if (!qrCode) {
             return res.status(404).json({
@@ -274,7 +278,8 @@ router.get('/qr/:deviceId', validateSession, async (req, res) => {
 
         res.json({
             success: true,
-            qrCode
+            qrCode,
+            status: device.data().status
         });
 
     } catch (error) {
