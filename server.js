@@ -7,10 +7,16 @@ const path = require('path');
 const admin = require('firebase-admin');
 
 // تهيئة Firebase Admin
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
+try {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    console.log('تم الاتصال بـ Firebase بنجاح');
+} catch (error) {
+    console.error('خطأ في الاتصال بـ Firebase:', error);
+    process.exit(1);
+}
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -44,7 +50,33 @@ app.use(session({
     proxy: true
 }));
 
-// تكوين المسارات الثابتة أولاً
+// تضمين المسارات
+const authRoutes = require('./routes/auth');
+const devicesRoutes = require('./routes/devices');
+const whatsappRoutes = require('./routes/whatsapp');
+const apiRoutes = require('./routes/api');
+const { validateSession } = require('./middleware/auth');
+
+// المسارات العامة
+app.use('/api/auth', authRoutes);
+app.use('/api/v1', apiRoutes);
+
+// المسارات المحمية
+const protectedFiles = [
+    '/home.html',
+    '/send.html',
+    '/profile.html'
+];
+
+// middleware للتحقق من المسارات المحمية
+app.use((req, res, next) => {
+    if (protectedFiles.includes(req.path)) {
+        return validateSession(req, res, next);
+    }
+    next();
+});
+
+// تكوين المسارات الثابتة
 app.use(express.static('public', {
     index: false,
     extensions: ['html'],
@@ -55,25 +87,7 @@ app.use(express.static('public', {
     }
 }));
 
-// تضمين المسارات
-const authRoutes = require('./routes/auth');
-const devicesRoutes = require('./routes/devices');
-const whatsappRoutes = require('./routes/whatsapp');
-const apiRoutes = require('./routes/api');
-
-// المسارات العامة
-app.use('/api/auth', authRoutes);
-app.use('/api/v1', apiRoutes);
-
-// المسارات المحمية
-const { validateSession } = require('./middleware/auth');
-
-// تطبيق المصادقة على المسارات المحمية
-app.get('/home.html', validateSession);
-app.get('/send.html', validateSession);
-app.get('/profile.html', validateSession);
-
-// تطبيق المصادقة على مسارات API المحمية
+// مسارات API المحمية
 app.use('/api/devices', validateSession, devicesRoutes);
 app.use('/api/whatsapp', validateSession, whatsappRoutes);
 
@@ -119,19 +133,6 @@ app.use((err, req, res, next) => {
     }
     next(err);
 });
-
-// التحقق من تهيئة Firebase
-if (!admin.apps.length) {
-    try {
-        admin.initializeApp({
-            credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_CONFIG))
-        });
-        console.log('تم الاتصال بـ Firebase بنجاح');
-    } catch (error) {
-        console.error('خطأ في الاتصال بـ Firebase:', error);
-        process.exit(1);
-    }
-}
 
 // بدء الخادم
 app.listen(port, '0.0.0.0', () => {
