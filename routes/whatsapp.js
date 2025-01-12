@@ -1,30 +1,47 @@
 const express = require('express');
 const router = express.Router();
-const admin = require('firebase-admin');
-const { validateSession } = require('../middleware/auth');
 const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
+const logger = require('../utils/logger');
+const firebase = require('../utils/firebase');
 
-// تخزين حالات الاتصال للمستخدمين
+// تخزين جلسات WhatsApp
 const clientSessions = new Map();
 
 /**
  * الحصول على حالة الاتصال
  */
-router.get('/status', validateSession, async (req, res) => {
-    console.log('التحقق من حالة اتصال WhatsApp للمستخدم:', req.user.id);
-    
+router.get('/status/:deviceId', async (req, res) => {
     try {
-        const status = await getConnectionStatus(req.user.id);
-        return res.json({
-            success: true,
-            status
+        const { deviceId } = req.params;
+        const client = clientSessions.get(deviceId);
+
+        // تسجيل محاولة الوصول
+        await logger.device('محاولة التحقق من حالة الجهاز', {
+            deviceId,
+            userId: req.user.id
         });
+
+        if (!client) {
+            return res.json({
+                status: 'disconnected',
+                message: 'الجهاز غير متصل'
+            });
+        }
+
+        return res.json({
+            status: client.status || 'disconnected',
+            message: client.statusMessage || 'الجهاز غير متصل'
+        });
+
     } catch (error) {
-        console.error('خطأ في جلب حالة الاتصال:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'حدث خطأ في جلب حالة الاتصال'
+        console.error('خطأ في التحقق من حالة الجهاز:', error);
+        await logger.error('خطأ في التحقق من حالة الجهاز', {
+            error: error.message,
+            deviceId: req.params.deviceId
+        });
+        res.status(500).json({
+            error: 'حدث خطأ أثناء التحقق من حالة الجهاز'
         });
     }
 });
@@ -32,17 +49,21 @@ router.get('/status', validateSession, async (req, res) => {
 /**
  * بدء جلسة جديدة
  */
-router.post('/session/start', validateSession, async (req, res) => {
-    console.log('بدء جلسة WhatsApp جديدة للمستخدم:', req.user.id);
-    
+router.post('/session/start/:deviceId', async (req, res) => {
     try {
+        const { deviceId } = req.params;
+        
         // التحقق من عدم وجود جلسة نشطة
-        const existingStatus = await getConnectionStatus(req.user.id);
-        if (existingStatus.connected) {
-            return res.status(400).json({
-                success: false,
-                error: 'يوجد جلسة نشطة بالفعل'
-            });
+        if (clientSessions.has(deviceId)) {
+            const existingClient = clientSessions.get(deviceId);
+            if (existingClient.status === 'connected') {
+                return res.status(400).json({
+                    error: 'الجهاز متصل بالفعل'
+                });
+            }
+            // إنهاء الجلسة القديمة
+            await existingClient.destroy();
+            clientSessions.delete(deviceId);
         }
 
         // إنشاء عميل جديد
@@ -53,61 +74,134 @@ router.post('/session/start', validateSession, async (req, res) => {
         });
 
         // تخزين العميل
-        clientSessions.set(req.user.id, {
-            client,
-            status: 'initializing',
-            qrCode: null
-        });
+        clientSessions.set(deviceId, client);
+        client.status = 'initializing';
+        client.statusMessage = 'جاري تهيئة الجلسة...';
+        client.qr = null;
 
         // معالجة الأحداث
-        setupClientEvents(client, req.user.id);
+        client.on('qr', async (qr) => {
+            try {
+                client.qr = await qrcode.toDataURL(qr);
+                client.status = 'qr_ready';
+                client.statusMessage = 'جاري انتظار مسح رمز QR...';
+                
+                await logger.device('تم إنشاء رمز QR جديد', {
+                    deviceId,
+                    userId: req.user.id
+                });
+            } catch (error) {
+                console.error('خطأ في إنشاء رمز QR:', error);
+                await logger.error('خطأ في إنشاء رمز QR', {
+                    error: error.message,
+                    deviceId
+                });
+            }
+        });
 
-        // بدء العميل
+        client.on('ready', async () => {
+            try {
+                client.status = 'connected';
+                client.statusMessage = 'متصل';
+                client.qr = null;
+
+                // تحديث حالة الجهاز في قاعدة البيانات
+                await firebase.updateDeviceStatus(deviceId, 'connected');
+                
+                await logger.device('تم الاتصال بنجاح', {
+                    deviceId,
+                    userId: req.user.id
+                });
+            } catch (error) {
+                console.error('خطأ في معالجة حدث ready:', error);
+                await logger.error('خطأ في معالجة حدث ready', {
+                    error: error.message,
+                    deviceId
+                });
+            }
+        });
+
+        client.on('authenticated', async () => {
+            try {
+                client.status = 'authenticated';
+                client.statusMessage = 'تم المصادقة';
+                
+                await logger.device('تم المصادقة بنجاح', {
+                    deviceId,
+                    userId: req.user.id
+                });
+            } catch (error) {
+                console.error('خطأ في معالجة حدث authenticated:', error);
+                await logger.error('خطأ في معالجة حدث authenticated', {
+                    error: error.message,
+                    deviceId
+                });
+            }
+        });
+
+        client.on('auth_failure', async (error) => {
+            try {
+                client.status = 'auth_failed';
+                client.statusMessage = 'فشل المصادقة';
+                
+                await logger.error('فشل المصادقة', {
+                    error: error.message,
+                    deviceId,
+                    userId: req.user.id
+                });
+
+                // تحديث حالة الجهاز في قاعدة البيانات
+                await firebase.updateDeviceStatus(deviceId, 'disconnected');
+            } catch (error) {
+                console.error('خطأ في معالجة حدث auth_failure:', error);
+                await logger.error('خطأ في معالجة حدث auth_failure', {
+                    error: error.message,
+                    deviceId
+                });
+            }
+        });
+
+        client.on('disconnected', async () => {
+            try {
+                client.status = 'disconnected';
+                client.statusMessage = 'تم قطع الاتصال';
+                client.qr = null;
+
+                // تحديث حالة الجهاز في قاعدة البيانات
+                await firebase.updateDeviceStatus(deviceId, 'disconnected');
+                
+                await logger.device('تم قطع الاتصال', {
+                    deviceId,
+                    userId: req.user.id
+                });
+
+                // إزالة العميل من الذاكرة
+                clientSessions.delete(deviceId);
+            } catch (error) {
+                console.error('خطأ في معالجة حدث disconnected:', error);
+                await logger.error('خطأ في معالجة حدث disconnected', {
+                    error: error.message,
+                    deviceId
+                });
+            }
+        });
+
+        // بدء تشغيل العميل
         await client.initialize();
 
-        return res.json({
-            success: true,
-            message: 'تم بدء الجلسة بنجاح'
+        res.json({
+            status: 'initializing',
+            message: 'جاري تهيئة الجلسة...'
         });
 
     } catch (error) {
         console.error('خطأ في بدء الجلسة:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'حدث خطأ في بدء الجلسة'
+        await logger.error('خطأ في بدء الجلسة', {
+            error: error.message,
+            deviceId: req.params.deviceId
         });
-    }
-});
-
-/**
- * إنهاء الجلسة
- */
-router.post('/session/end', validateSession, async (req, res) => {
-    console.log('إنهاء جلسة WhatsApp للمستخدم:', req.user.id);
-    
-    try {
-        const session = clientSessions.get(req.user.id);
-        if (!session) {
-            return res.status(400).json({
-                success: false,
-                error: 'لا توجد جلسة نشطة'
-            });
-        }
-
-        // إنهاء العميل
-        await session.client.destroy();
-        clientSessions.delete(req.user.id);
-
-        return res.json({
-            success: true,
-            message: 'تم إنهاء الجلسة بنجاح'
-        });
-
-    } catch (error) {
-        console.error('خطأ في إنهاء الجلسة:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'حدث خطأ في إنهاء الجلسة'
+        res.status(500).json({
+            error: 'حدث خطأ أثناء بدء الجلسة'
         });
     }
 });
@@ -115,121 +209,87 @@ router.post('/session/end', validateSession, async (req, res) => {
 /**
  * الحصول على رمز QR
  */
-router.get('/qr', validateSession, async (req, res) => {
-    console.log('طلب رمز QR للمستخدم:', req.user.id);
-    
+router.get('/qr/:deviceId', async (req, res) => {
     try {
-        const session = clientSessions.get(req.user.id);
-        if (!session || !session.qrCode) {
-            return res.status(400).json({
-                success: false,
-                error: 'رمز QR غير متوفر'
+        const { deviceId } = req.params;
+        const client = clientSessions.get(deviceId);
+
+        // تسجيل محاولة الوصول
+        await logger.device('محاولة الحصول على رمز QR', {
+            deviceId,
+            userId: req.user.id
+        });
+
+        if (!client) {
+            return res.status(404).json({
+                error: 'الجهاز غير موجود'
             });
         }
 
-        // تحويل رمز QR إلى صورة
-        const qrImage = await qrcode.toDataURL(session.qrCode);
+        if (!client.qr) {
+            return res.status(404).json({
+                error: 'رمز QR غير متوفر حالياً'
+            });
+        }
 
-        return res.json({
-            success: true,
-            qrCode: qrImage
+        res.json({
+            qr: client.qr
         });
 
     } catch (error) {
         console.error('خطأ في جلب رمز QR:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'حدث خطأ في جلب رمز QR'
+        await logger.error('خطأ في جلب رمز QR', {
+            error: error.message,
+            deviceId: req.params.deviceId
+        });
+        res.status(500).json({
+            error: 'حدث خطأ أثناء جلب رمز QR'
         });
     }
 });
 
 /**
- * إعداد أحداث العميل
+ * إنهاء الجلسة
  */
-function setupClientEvents(client, userId) {
-    client.on('qr', qr => {
-        console.log('تم إنشاء رمز QR جديد للمستخدم:', userId);
-        const session = clientSessions.get(userId);
-        if (session) {
-            session.qrCode = qr;
-            session.status = 'qr_ready';
-        }
-    });
-
-    client.on('ready', () => {
-        console.log('WhatsApp جاهز للمستخدم:', userId);
-        const session = clientSessions.get(userId);
-        if (session) {
-            session.status = 'connected';
-            session.qrCode = null;
-        }
-        updateUserStatus(userId, 'connected');
-    });
-
-    client.on('authenticated', () => {
-        console.log('تم المصادقة للمستخدم:', userId);
-        const session = clientSessions.get(userId);
-        if (session) {
-            session.status = 'authenticated';
-        }
-    });
-
-    client.on('auth_failure', () => {
-        console.error('فشل المصادقة للمستخدم:', userId);
-        const session = clientSessions.get(userId);
-        if (session) {
-            session.status = 'auth_failed';
-        }
-        updateUserStatus(userId, 'auth_failed');
-    });
-
-    client.on('disconnected', () => {
-        console.log('تم قطع الاتصال للمستخدم:', userId);
-        const session = clientSessions.get(userId);
-        if (session) {
-            session.status = 'disconnected';
-        }
-        updateUserStatus(userId, 'disconnected');
-        clientSessions.delete(userId);
-    });
-}
-
-/**
- * الحصول على حالة الاتصال
- */
-async function getConnectionStatus(userId) {
-    const session = clientSessions.get(userId);
-    const status = session ? session.status : 'disconnected';
-    
-    const userDoc = await admin.firestore()
-        .collection('users')
-        .doc(userId)
-        .get();
-
-    return {
-        connected: status === 'connected',
-        status,
-        lastConnection: userDoc.data()?.lastWhatsAppConnection?.toDate(),
-        phoneNumber: userDoc.data()?.whatsappPhone
-    };
-}
-
-/**
- * تحديث حالة المستخدم
- */
-async function updateUserStatus(userId, status) {
+router.post('/session/end/:deviceId', async (req, res) => {
     try {
-        await admin.firestore()
-            .collection('users')
-            .doc(userId)
-            .update({
-                whatsappStatus: status,
-                lastWhatsAppConnection: admin.firestore.FieldValue.serverTimestamp()
+        const { deviceId } = req.params;
+        const client = clientSessions.get(deviceId);
+
+        if (!client) {
+            return res.status(404).json({
+                error: 'الجهاز غير موجود'
             });
+        }
+
+        // تسجيل الحدث
+        await logger.device('جاري إنهاء الجلسة', {
+            deviceId,
+            userId: req.user.id
+        });
+
+        // إنهاء الجلسة
+        await client.destroy();
+        clientSessions.delete(deviceId);
+
+        // تحديث حالة الجهاز في قاعدة البيانات
+        await firebase.updateDeviceStatus(deviceId, 'disconnected');
+
+        res.json({
+            status: 'success',
+            message: 'تم إنهاء الجلسة بنجاح'
+        });
+
     } catch (error) {
-        console.error('خطأ في تحديث حالة المستخدم:', error);
+        console.error('خطأ في إنهاء الجلسة:', error);
+        await logger.error('خطأ في إنهاء الجلسة', {
+            error: error.message,
+            deviceId: req.params.deviceId
+        });
+        res.status(500).json({
+            error: 'حدث خطأ أثناء إنهاء الجلسة'
+        });
     }
-}
+});
 
 module.exports = router; 
