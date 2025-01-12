@@ -64,7 +64,13 @@ const apiRoutes = require('./routes/api');
 // تكوين المسارات الثابتة
 app.use(express.static('public', {
     index: false,
-    extensions: ['html']
+    extensions: ['html'],
+    setHeaders: (res, path, stat) => {
+        // تعطيل التخزين المؤقت للملفات HTML
+        if (path.endsWith('.html')) {
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        }
+    }
 }));
 
 // تكوين المسارات
