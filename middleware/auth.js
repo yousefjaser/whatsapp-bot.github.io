@@ -3,16 +3,23 @@ const admin = require('firebase-admin');
 // قائمة المسارات المسموح بها بدون تسجيل دخول
 const publicPaths = [
     '/',
+    '/login',
     '/login.html',
+    '/register',
     '/register.html',
+    '/reset-password',
     '/reset-password.html',
+    '/api-docs',
     '/api-docs.html',
+    '/api-dashboard',
     '/api-dashboard.html',
+    '/docs',
     '/docs.html',
     '/css',
     '/js',
     '/images',
-    '/favicon.ico'
+    '/favicon.ico',
+    '/public'
 ];
 
 // التحقق من الجلسة

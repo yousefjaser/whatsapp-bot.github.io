@@ -75,10 +75,11 @@ const apiRoutes = require('./routes/api');
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api/v1', apiRoutes);
+app.use('/api', apiRoutes);
 
-// تقديم الملفات الثابتة
+// تكوين المسارات الثابتة
 app.use(express.static('public'));
+app.use('/public', express.static('public'));
 
 // التوجيه الرئيسي
 app.get('/', (req, res) => {
