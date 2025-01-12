@@ -44,16 +44,16 @@ app.use(session({
     proxy: true
 }));
 
-// التحقق من المصادقة لجميع المسارات المحمية
-const protectedPaths = [
-    '/home.html',
-    '/send.html',
-    '/profile.html'
-];
-
-// استخدام middleware المصادقة
-const { validateSession } = require('./middleware/auth');
-app.use(validateSession);
+// تكوين المسارات الثابتة أولاً
+app.use(express.static('public', {
+    index: false,
+    extensions: ['html'],
+    setHeaders: (res, path, stat) => {
+        if (path.endsWith('.html')) {
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        }
+    }
+}));
 
 // تضمين المسارات
 const authRoutes = require('./routes/auth');
@@ -61,23 +61,25 @@ const devicesRoutes = require('./routes/devices');
 const whatsappRoutes = require('./routes/whatsapp');
 const apiRoutes = require('./routes/api');
 
-// تكوين المسارات الثابتة
-app.use(express.static('public', {
-    index: false,
-    extensions: ['html'],
-    setHeaders: (res, path, stat) => {
-        // تعطيل التخزين المؤقت للملفات HTML
-        if (path.endsWith('.html')) {
-            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-        }
-    }
-}));
-
-// تكوين المسارات
+// المسارات العامة
 app.use('/api/auth', authRoutes);
 app.use('/api/v1', apiRoutes);
-app.use('/api/devices', validateSession, devicesRoutes);
-app.use('/api/whatsapp', validateSession, whatsappRoutes);
+
+// المسارات المحمية
+const { validateSession } = require('./middleware/auth');
+
+// التحقق من المصادقة للمسارات المحمية فقط
+const protectedPaths = [
+    '/home.html',
+    '/send.html',
+    '/profile.html',
+    '/api/devices',
+    '/api/whatsapp'
+];
+
+app.use(protectedPaths, validateSession);
+app.use('/api/devices', devicesRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // التوجيه الرئيسي
 app.get('/', (req, res) => {
