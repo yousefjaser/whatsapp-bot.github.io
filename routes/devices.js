@@ -11,6 +11,9 @@ const qrCodes = new Map();
 // تخزين مؤقت للعملاء
 const clients = new Map();
 
+// تخزين مؤقت لمعلومات البروفايل
+const profileInfo = new Map();
+
 // دالة مساعدة لمعالجة الأخطاء
 async function handleDeviceError(deviceRef, error) {
     try {
@@ -159,6 +162,39 @@ router.post('/add', validateSession, async (req, res) => {
 
             } catch (error) {
                 console.error('خطأ في تحديث حالة الاتصال:', error);
+                await handleDeviceError(deviceRef, error);
+            }
+        });
+
+        // الاستماع لحدث المصادقة
+        client.on('authenticated', async () => {
+            try {
+                console.log('تم المصادقة بنجاح للجهاز:', deviceRef.id);
+                
+                // الحصول على معلومات البروفايل
+                const info = await client.getWid();
+                const phoneNumber = info.user;
+                const profilePic = await client.getProfilePicUrl(info._serialized);
+                
+                // حفظ معلومات البروفايل
+                const profileData = {
+                    phoneNumber,
+                    profilePic,
+                    timestamp: new Date()
+                };
+                profileInfo.set(deviceRef.id, profileData);
+
+                // تحديث حالة الجهاز
+                await deviceRef.update({
+                    status: 'authenticated',
+                    phoneNumber,
+                    profilePic,
+                    'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
+                    'metadata.authenticatedAt': admin.firestore.FieldValue.serverTimestamp()
+                });
+
+            } catch (error) {
+                console.error('خطأ في حفظ معلومات البروفايل:', error);
                 await handleDeviceError(deviceRef, error);
             }
         });
@@ -314,11 +350,11 @@ router.get('/', validateSession, async (req, res) => {
     try {
         const userId = req.session.userId;
 
+        // تعديل الاستعلام لتجنب الحاجة إلى فهرس مركب
         const devicesSnapshot = await admin.firestore()
             .collection('devices')
             .where('userId', '==', userId)
             .where('isActive', '==', true)
-            .orderBy('createdAt', 'desc')
             .get();
 
         const devices = [];
@@ -330,8 +366,15 @@ router.get('/', validateSession, async (req, res) => {
                 status: device.status,
                 lastConnection: device.lastConnection,
                 connected: device.status === 'connected',
-                sessionData: device.sessionData // سيتم استخدامه لاستعادة الجلسة
+                sessionData: device.sessionData
             });
+        });
+
+        // ترتيب النتائج بعد استرجاعها
+        devices.sort((a, b) => {
+            const dateA = a.lastConnection ? new Date(a.lastConnection.seconds * 1000) : new Date(0);
+            const dateB = b.lastConnection ? new Date(b.lastConnection.seconds * 1000) : new Date(0);
+            return dateB - dateA;
         });
 
         res.json({
@@ -437,6 +480,51 @@ router.post('/:deviceId/disconnect', validateSession, async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'حدث خطأ في فصل الجهاز'
+        });
+    }
+});
+
+// الحصول على معلومات البروفايل
+router.get('/profile/:deviceId', validateSession, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const userId = req.session.userId;
+
+        // التحقق من ملكية الجهاز
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
+        }
+
+        const deviceData = device.data();
+        const profile = profileInfo.get(deviceId);
+
+        if (!profile && deviceData.status !== 'authenticated') {
+            return res.status(404).json({
+                success: false,
+                error: 'معلومات البروفايل غير متوفرة'
+            });
+        }
+
+        res.json({
+            success: true,
+            profile: profile || {
+                phoneNumber: deviceData.phoneNumber,
+                profilePic: deviceData.profilePic,
+                status: deviceData.status
+            }
+        });
+
+    } catch (error) {
+        console.error('خطأ في جلب معلومات البروفايل:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في جلب معلومات البروفايل'
         });
     }
 });

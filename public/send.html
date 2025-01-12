@@ -668,6 +668,44 @@
             clearIntervals();
             document.getElementById('qrContainer').innerHTML = '';
         });
+
+        // دالة للتحقق من حالة الاتصال
+        async function checkConnectionStatus(deviceId) {
+            try {
+                const response = await fetch(`/api/devices/profile/${deviceId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // إخفاء QR code وعرض معلومات البروفايل
+                    const qrContainer = document.getElementById('qrContainer');
+                    const profileContainer = document.getElementById('profileContainer');
+                    
+                    qrContainer.style.display = 'none';
+                    profileContainer.style.display = 'block';
+                    
+                    // تحديث معلومات البروفايل
+                    const profileHtml = `
+                        <div class="text-center mb-3">
+                            <img src="${data.profile.profilePic}" class="rounded-circle profile-pic mb-2" alt="صورة البروفايل">
+                            <h5 class="mb-1">${data.profile.phoneNumber}</h5>
+                            <span class="badge bg-success">تم الاتصال بنجاح</span>
+                        </div>
+                    `;
+                    profileContainer.innerHTML = profileHtml;
+
+                    // إيقاف الفحص وإغلاق المودال بعد 3 ثواني
+                    clearInterval(statusCheckInterval);
+                    setTimeout(() => {
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
+                        modal.hide();
+                        // تحديث قائمة الأجهزة
+                        loadDevices();
+                    }, 3000);
+                }
+            } catch (error) {
+                console.error('خطأ في التحقق من حالة الاتصال:', error);
+            }
+        }
     </script>
 </body>
 </html> 
