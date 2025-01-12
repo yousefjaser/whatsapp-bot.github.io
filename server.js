@@ -37,10 +37,11 @@ app.use(session({
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
-        sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000
     },
-    name: 'sessionId'
+    name: 'sessionId',
+    proxy: true
 }));
 
 // التحقق من المصادقة لجميع المسارات المحمية

@@ -32,33 +32,45 @@ const publicPaths = [
 // التحقق من الجلسة
 const validateSession = async (req, res, next) => {
     try {
-        // تجاهل الملفات الثابتة
-        if (req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg)$/)) {
+        // تجاهل الملفات الثابتة والمسارات العامة
+        if (req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg)$/) ||
+            publicPaths.some(path => req.path === path || req.path.startsWith(path + '/')) ||
+            req.path.startsWith('/api/auth/') ||
+            req.path.startsWith('/api/v1/')) {
             return next();
         }
 
-        // السماح بالوصول للمسارات العامة
-        if (publicPaths.some(path => req.path === path || req.path.startsWith(path + '/'))) {
-            return next();
-        }
-
-        // السماح بالوصول لمسارات API المحددة
-        if (req.path.startsWith('/api/auth/') || req.path.startsWith('/api/v1/')) {
-            return next();
-        }
-
-        // التحقق من وجود جلسة
+        // التحقق من وجود جلسة صالحة
         if (!req.session || !req.session.userId) {
+            console.log('جلسة غير صالحة:', req.path);
             if (req.xhr || req.path.startsWith('/api/')) {
                 return res.status(401).json({
                     success: false,
                     error: 'يرجى تسجيل الدخول أولاً'
                 });
             }
-            return res.redirect('/login.html');
+            return res.redirect('/login.html?redirect=' + encodeURIComponent(req.path));
         }
 
-        next();
+        // التحقق من صلاحية الجلسة
+        try {
+            const sessionUser = await admin.auth().getUser(req.session.userId);
+            if (!sessionUser) {
+                throw new Error('المستخدم غير موجود');
+            }
+            req.user = sessionUser;
+            next();
+        } catch (error) {
+            console.error('خطأ في التحقق من المستخدم:', error);
+            req.session.destroy();
+            if (req.xhr || req.path.startsWith('/api/')) {
+                return res.status(401).json({
+                    success: false,
+                    error: 'انتهت صلاحية الجلسة'
+                });
+            }
+            res.redirect('/login.html');
+        }
     } catch (error) {
         console.error('خطأ في التحقق من الجلسة:', error);
         if (req.xhr || req.path.startsWith('/api/')) {
