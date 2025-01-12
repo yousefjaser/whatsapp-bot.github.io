@@ -15,6 +15,7 @@
             --text-color: #333;
             --card-bg: #fff;
             --border-color: #ddd;
+            --whatsapp-bg: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAGlSURBVDhPY/j//z8K9pz6HwUzMDAy4sWKxrIMykY6DK9fvWVQVpBj+PzpM4OltTnD7dt3GGRlpBlu3rzFICYmyvDt2zcGGxtrhrt37zPw8/MzPH/+nEFfX5fh4cNHDNLS0gzv3r1jMDMzZXj8+AmDiIgww8ePnxhsbCwZ7t17wMDLy8vw4sULBl1dbYZHj54wiIqKMHz48IHB2tqC4d69hwzc3FwMLwEGGhjoMTx+/BRuIBsba0RACvAzPH/xEsVAkLNBBvJwczO8fPUaxUBWVlaGt+/eowWsAD8/w4uXr+AGgrwMUrSytGC4d/8hXJyFhZnh3ft3cANZmJkZbKwtGO7ee4Ai+f7DBxQD37//wGBtacZw9959uOSHDx9RDGT6/+8/g7WVOcPde/fhkh8/fmRgYkKkGAYGBgYbG0uGe/cfMPDwcDN8/PiJwcTYiOHx4ycMwkKCDB8/fWawt7dluH37LgMfHy/Dq1dvGIyNDBmePH3GICQkCE5bDg52DLdv32Xg5eVhePP2LYORoT7DM6AaDg52hrdv3zEYGuoz/Pv3l0FRUQEeXQDCIKXI9kELUAAAAABJRU5ErkJggg==');
         }
 
         [data-theme="dark"] {
@@ -22,6 +23,9 @@
             --text-color: #fff;
             --card-bg: #2d2d2d;
             --border-color: #404040;
+            --input-bg: #333;
+            --input-color: #fff;
+            --input-border: #555;
         }
 
         body {
@@ -42,15 +46,16 @@
         }
 
         .form-control, .form-select {
-            background-color: var(--card-bg);
-            border-color: var(--border-color);
-            color: var(--text-color);
+            background-color: var(--input-bg, var(--card-bg));
+            border-color: var(--input-border, var(--border-color));
+            color: var(--input-color, var(--text-color));
         }
 
         .form-control:focus, .form-select:focus {
-            background-color: var(--card-bg);
+            background-color: var(--input-bg, var(--card-bg));
             border-color: var(--primary-color);
-            color: var(--text-color);
+            color: var(--input-color, var(--text-color));
+            box-shadow: 0 0 0 0.25rem rgba(18, 140, 126, 0.25);
         }
 
         .device-card {
@@ -100,6 +105,39 @@
             border-radius: 20px;
             color: white;
         }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+        }
+
+        .qr-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px auto;
+            max-width: 300px;
+        }
+
+        .profile-container {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .profile-image {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            object-fit: cover;
+            border: 3px solid var(--primary-color);
+        }
+
+        .device-card {
+            background: var(--whatsapp-bg);
+            background-color: var(--card-bg);
+        }
     </style>
 </head>
 <body>
@@ -140,6 +178,11 @@
                     </div>
                     <div class="card-body" id="devicesList">
                         <!-- سيتم تعبئة هذا القسم بواسطة JavaScript -->
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-success w-100" onclick="addNewDevice()">
+                            <i class="bi bi-plus-circle"></i> إضافة جهاز جديد
+                        </button>
                     </div>
                 </div>
             </div>
@@ -198,6 +241,31 @@
                                 <pre id="apiExample"><!-- سيتم تعبئته بواسطة JavaScript --></pre>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- مودال إضافة جهاز -->
+    <div class="modal fade" id="deviceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">إضافة جهاز جديد</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="qrContainer" class="qr-container">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">جاري التحميل...</span>
+                        </div>
+                        <div id="qrCode" style="display: none;"></div>
+                    </div>
+                    <div id="profileContainer" class="profile-container" style="display: none;">
+                        <img id="profileImage" class="profile-image" src="" alt="الصورة الشخصية">
+                        <h4 id="profileName" class="mb-2"></h4>
+                        <p id="profilePhone" class="text-muted"></p>
                     </div>
                 </div>
             </div>
@@ -347,6 +415,71 @@
             // جلب قائمة الأجهزة عند تحميل الصفحة
             socket.emit('getDevices');
         });
+
+        // إضافة جهاز جديد
+        async function addNewDevice() {
+            const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
+            modal.show();
+            
+            try {
+                const response = await fetch('/api/devices/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // عرض رمز QR
+                    document.getElementById('qrCode').innerHTML = `<img src="${data.qr}" alt="رمز QR">`;
+                    document.getElementById('qrCode').style.display = 'block';
+                    document.querySelector('#qrContainer .spinner-border').style.display = 'none';
+                    
+                    // بدء التحقق من حالة الاتصال
+                    checkConnectionStatus(data.deviceId);
+                } else {
+                    alert(data.error || 'حدث خطأ في إضافة الجهاز');
+                    modal.hide();
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+                alert('حدث خطأ في الاتصال بالخادم');
+                modal.hide();
+            }
+        }
+
+        // التحقق من حالة الاتصال
+        function checkConnectionStatus(deviceId) {
+            const checkInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/devices/${deviceId}/status`);
+                    const data = await response.json();
+                    
+                    if (data.connected) {
+                        clearInterval(checkInterval);
+                        // عرض معلومات الملف الشخصي
+                        document.getElementById('qrContainer').style.display = 'none';
+                        document.getElementById('profileImage').src = data.profileImage;
+                        document.getElementById('profileName').textContent = data.name;
+                        document.getElementById('profilePhone').textContent = `${data.countryCode} ${data.phone}`;
+                        document.getElementById('profileContainer').style.display = 'block';
+                        
+                        // تحديث قائمة الأجهزة
+                        socket.emit('getDevices');
+                        
+                        // إغلاق المودال بعد 3 ثواني
+                        setTimeout(() => {
+                            bootstrap.Modal.getInstance(document.getElementById('deviceModal')).hide();
+                        }, 3000);
+                    }
+                } catch (error) {
+                    console.error('خطأ في التحقق من حالة الاتصال:', error);
+                }
+            }, 2000);
+        }
     </script>
 </body>
 </html> 
