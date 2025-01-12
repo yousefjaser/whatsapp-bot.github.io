@@ -3,54 +3,16 @@ const router = express.Router();
 const admin = require('firebase-admin');
 const bcrypt = require('bcryptjs');
 
-// قائمة المسارات المسموح بها بدون تسجيل دخول
-const publicPaths = [
-    '/',
-    '/login',
-    '/login.html',
-    '/register',
-    '/register.html',
-    '/reset-password',
-    '/reset-password.html',
-    '/api-docs',
-    '/api-docs.html',
-    '/api-dashboard',
-    '/api-dashboard.html',
-    '/docs',
-    '/docs.html',
-    '/css',
-    '/js',
-    '/images',
-    '/favicon.ico',
-    '/public'
-];
-
-// التحقق من الجلسة
-const validateSession = async (req, res, next) => {
-    // السماح بالوصول للمسارات العامة
-    if (publicPaths.some(path => req.path.startsWith(path))) {
-        return next();
-    }
-
-    // التحقق من وجود جلسة
-    if (!req.session || !req.session.userId) {
-        if (req.xhr || req.path.startsWith('/api/')) {
-            return res.status(401).json({
-                success: false,
-                error: 'غير مصرح بالوصول'
-            });
-        }
-        return res.redirect('/login.html');
-    }
-
-    next();
-};
-
-// تسجيل الدخول
+/**
+ * تسجيل الدخول
+ */
 router.post('/login', async (req, res) => {
+    console.log('محاولة تسجيل دخول جديدة');
+    
     try {
         const { email, password } = req.body;
 
+        // التحقق من البيانات المطلوبة
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
@@ -59,96 +21,61 @@ router.post('/login', async (req, res) => {
         }
 
         // التحقق من المستخدم المالك
-        if (email.toLowerCase() === 'yousefjaser2020@gmail.com') {
-            // التحقق من كلمة المرور للمالك
-            if (password === process.env.OWNER_PASSWORD) {
-                // إنشاء وثيقة للمالك إذا لم تكن موجودة
-                const usersRef = admin.firestore().collection('users');
-                const ownerSnapshot = await usersRef.where('email', '==', email.toLowerCase()).get();
-                
-                let ownerId;
-                if (ownerSnapshot.empty) {
-                    const ownerDoc = await usersRef.add({
-                        email,
-                        name: 'المالك',
-                        role: 'owner',
-                        createdAt: admin.firestore.FieldValue.serverTimestamp()
-                    });
-                    ownerId = ownerDoc.id;
-                } else {
-                    ownerId = ownerSnapshot.docs[0].id;
-                }
-
-                // إنشاء جلسة للمالك
-                req.session.userId = ownerId;
-                
-                return res.json({
-                    success: true,
-                    user: {
-                        id: ownerId,
-                        email,
-                        role: 'owner'
-                    }
-                });
-            }
+        if (email.toLowerCase() === process.env.OWNER_EMAIL) {
+            return handleOwnerLogin(req, res, email, password);
         }
 
         // البحث عن المستخدم العادي
-        const usersRef = admin.firestore().collection('users');
-        const snapshot = await usersRef.where('email', '==', email).get();
-
-        if (snapshot.empty) {
+        const userDoc = await findUserByEmail(email);
+        if (!userDoc) {
             return res.status(401).json({
                 success: false,
                 error: 'بيانات الدخول غير صحيحة'
             });
         }
-
-        const userDoc = snapshot.docs[0];
-        const userData = userDoc.data();
 
         // التحقق من كلمة المرور
-        const isValid = await bcrypt.compare(password, userData.password);
-
-        if (!isValid) {
+        const isValidPassword = await verifyPassword(password, userDoc.data().password);
+        if (!isValidPassword) {
             return res.status(401).json({
                 success: false,
                 error: 'بيانات الدخول غير صحيحة'
             });
         }
 
-        // إنشاء جلسة
-        req.session.userId = userDoc.id;
-        
-        // تحديث آخر تسجيل دخول
-        await userDoc.ref.update({
-            lastLogin: admin.firestore.FieldValue.serverTimestamp()
-        });
+        // إنشاء الجلسة
+        await createUserSession(req, userDoc);
 
-        res.json({
+        // إرسال البيانات
+        return res.json({
             success: true,
             user: {
                 id: userDoc.id,
-                email: userData.email,
-                name: userData.name,
-                role: userData.role || 'user'
+                email: userDoc.data().email,
+                name: userDoc.data().name,
+                role: userDoc.data().role || 'user'
             }
         });
 
     } catch (error) {
         console.error('خطأ في تسجيل الدخول:', error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             error: 'حدث خطأ في تسجيل الدخول'
         });
     }
 });
 
-// تسجيل حساب جديد
+/**
+ * تسجيل حساب جديد
+ */
 router.post('/register', async (req, res) => {
+    console.log('محاولة تسجيل حساب جديد');
+    
     try {
         const { email, password, name } = req.body;
 
+        // التحقق من البيانات المطلوبة
         if (!email || !password || !name) {
             return res.status(400).json({
                 success: false,
@@ -157,32 +84,23 @@ router.post('/register', async (req, res) => {
         }
 
         // التحقق من عدم وجود المستخدم
-        const usersRef = admin.firestore().collection('users');
-        const snapshot = await usersRef.where('email', '==', email).get();
-
-        if (!snapshot.empty) {
+        const existingUser = await findUserByEmail(email);
+        if (existingUser) {
             return res.status(400).json({
                 success: false,
                 error: 'البريد الإلكتروني مستخدم بالفعل'
             });
         }
 
-        // تشفير كلمة المرور
-        const hashedPassword = await bcrypt.hash(password, 10);
-
         // إنشاء المستخدم
-        const userDoc = await usersRef.add({
-            email,
-            password: hashedPassword,
-            name,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            role: 'user'
-        });
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const userDoc = await createUser(email, hashedPassword, name);
 
-        // إنشاء جلسة
-        req.session.userId = userDoc.id;
+        // إنشاء الجلسة
+        await createUserSession(req, userDoc);
 
-        res.json({
+        // إرسال البيانات
+        return res.json({
             success: true,
             user: {
                 id: userDoc.id,
@@ -193,15 +111,19 @@ router.post('/register', async (req, res) => {
 
     } catch (error) {
         console.error('خطأ في إنشاء الحساب:', error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             error: 'حدث خطأ في إنشاء الحساب'
         });
     }
 });
 
-// تسجيل الخروج
+/**
+ * تسجيل الخروج
+ */
 router.post('/logout', (req, res) => {
+    console.log('تسجيل الخروج للمستخدم:', req.session?.userId);
+    
     req.session.destroy(err => {
         if (err) {
             console.error('خطأ في تسجيل الخروج:', err);
@@ -218,10 +140,12 @@ router.post('/logout', (req, res) => {
     });
 });
 
-// التحقق من حالة المصادقة
+/**
+ * التحقق من حالة المصادقة
+ */
 router.get('/status', async (req, res) => {
     try {
-        if (!req.session.userId) {
+        if (!req.session?.userId) {
             return res.json({
                 success: true,
                 authenticated: false
@@ -241,23 +165,150 @@ router.get('/status', async (req, res) => {
         }
 
         const userData = userDoc.data();
-        res.json({
+        return res.json({
             success: true,
             authenticated: true,
             user: {
                 id: userDoc.id,
                 email: userData.email,
-                name: userData.name
+                name: userData.name,
+                role: userData.role || 'user'
             }
         });
 
     } catch (error) {
         console.error('خطأ في التحقق من حالة المصادقة:', error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             error: 'حدث خطأ في التحقق من حالة المصادقة'
         });
     }
 });
+
+/**
+ * معالجة تسجيل دخول المالك
+ */
+async function handleOwnerLogin(req, res, email, password) {
+    if (password !== process.env.OWNER_PASSWORD) {
+        return res.status(401).json({
+            success: false,
+            error: 'بيانات الدخول غير صحيحة'
+        });
+    }
+
+    // البحث عن حساب المالك أو إنشاؤه
+    const ownerDoc = await findOrCreateOwner(email);
+    
+    // إنشاء الجلسة
+    await createUserSession(req, ownerDoc);
+
+    return res.json({
+        success: true,
+        user: {
+            id: ownerDoc.id,
+            email,
+            name: 'المالك',
+            role: 'owner'
+        }
+    });
+}
+
+/**
+ * البحث عن المستخدم بالبريد الإلكتروني
+ */
+async function findUserByEmail(email) {
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .where('email', '==', email.toLowerCase())
+        .get();
+
+    return snapshot.empty ? null : snapshot.docs[0];
+}
+
+/**
+ * التحقق من كلمة المرور
+ */
+async function verifyPassword(password, hashedPassword) {
+    try {
+        return await bcrypt.compare(password, hashedPassword);
+    } catch (error) {
+        console.error('خطأ في التحقق من كلمة المرور:', error);
+        return false;
+    }
+}
+
+/**
+ * إنشاء مستخدم جديد
+ */
+async function createUser(email, hashedPassword, name) {
+    const userDoc = await admin.firestore()
+        .collection('users')
+        .add({
+            email: email.toLowerCase(),
+            password: hashedPassword,
+            name,
+            role: 'user',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+    return {
+        id: userDoc.id,
+        data: () => ({
+            email,
+            name,
+            role: 'user'
+        })
+    };
+}
+
+/**
+ * البحث عن حساب المالك أو إنشاؤه
+ */
+async function findOrCreateOwner(email) {
+    const ownerDoc = await findUserByEmail(email);
+    if (ownerDoc) return ownerDoc;
+
+    const newOwnerDoc = await admin.firestore()
+        .collection('users')
+        .add({
+            email: email.toLowerCase(),
+            name: 'المالك',
+            role: 'owner',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+    return {
+        id: newOwnerDoc.id,
+        data: () => ({
+            email,
+            name: 'المالك',
+            role: 'owner'
+        })
+    };
+}
+
+/**
+ * إنشاء جلسة للمستخدم
+ */
+async function createUserSession(req, userDoc) {
+    req.session.userId = userDoc.id;
+    await updateLastLogin(userDoc.id);
+}
+
+/**
+ * تحديث آخر تسجيل دخول
+ */
+async function updateLastLogin(userId) {
+    try {
+        await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .update({
+                lastLogin: admin.firestore.FieldValue.serverTimestamp()
+            });
+    } catch (error) {
+        console.error('خطأ في تحديث آخر تسجيل دخول:', error);
+    }
+}
 
 module.exports = router; 

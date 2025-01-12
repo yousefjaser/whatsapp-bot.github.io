@@ -9,9 +9,11 @@ const admin = require('firebase-admin');
 // تهيئة Firebase Admin
 try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-    });
+    if (!admin.apps.length) {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+    }
     console.log('تم الاتصال بـ Firebase بنجاح');
 } catch (error) {
     console.error('خطأ في الاتصال بـ Firebase:', error);
@@ -27,11 +29,14 @@ app.set('trust proxy', 1);
 // إعداد CORS
 app.use(cors({
     origin: process.env.BASE_URL || 'http://localhost:3001',
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // الوسائط
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // إعداد الجلسات
@@ -44,7 +49,7 @@ app.use(session({
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000
+        maxAge: 24 * 60 * 60 * 1000 // 24 ساعة
     },
     name: 'sessionId',
     proxy: true
@@ -58,69 +63,36 @@ const apiRoutes = require('./routes/api');
 const { validateSession } = require('./middleware/auth');
 
 // المسارات العامة
-app.use('/api/auth', authRoutes);
-app.use('/api/v1', apiRoutes);
+const publicPaths = [
+    '/',
+    '/welcome.html',
+    '/login.html',
+    '/register.html',
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/status',
+    '/api/v1/send',
+    '/css',
+    '/js',
+    '/images',
+    '/favicon.ico'
+];
 
 // المسارات المحمية
-const protectedFiles = [
+const protectedPaths = [
     '/home.html',
     '/send.html',
     '/profile.html'
 ];
 
 // المسارات التي تتطلب تسجيل الدخول
-const authRequiredFiles = [
+const authRequiredPaths = [
     '/api-dashboard.html',
     '/docs.html',
     '/api-docs.html'
 ];
 
-// middleware للتحقق من المسارات المحمية
-app.use((req, res, next) => {
-    const path = req.path;
-    console.log('التحقق من المسار:', path);
-
-    // تجاهل الملفات الثابتة
-    if (path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg)$/)) {
-        return next();
-    }
-
-    // تجاهل المسارات العامة
-    if (path === '/' || 
-        path === '/welcome.html' || 
-        path === '/login.html' || 
-        path === '/register.html' ||
-        path === '/api/auth/login' ||
-        path === '/api/auth/register' ||
-        path === '/api/auth/status') {
-        return next();
-    }
-
-    // التحقق من حالة المستخدم
-    if (!req.session || !req.session.userId) {
-        // تجنب التوجيه المتكرر إذا كان المستخدم بالفعل في صفحة تسجيل الدخول
-        if (path === '/login.html') {
-            return next();
-        }
-        console.log('مستخدم غير مسجل يحاول الوصول إلى:', path);
-        return res.redirect('/login.html?redirect=' + encodeURIComponent(path));
-    }
-
-    // المسارات المحمية تتطلب التحقق الكامل
-    if (protectedFiles.includes(path)) {
-        return validateSession(req, res, next);
-    }
-
-    // المسارات التي تتطلب تسجيل دخول فقط
-    if (authRequiredFiles.includes(path)) {
-        console.log('مستخدم مسجل يحاول الوصول إلى:', path);
-        return next();
-    }
-
-    next();
-});
-
-// تكوين المسارات الثابتة
+// تكوين المسارات الثابتة أولاً
 app.use(express.static('public', {
     index: false,
     extensions: ['html'],
@@ -134,6 +106,49 @@ app.use(express.static('public', {
         }
     }
 }));
+
+// المسارات العامة
+app.use('/api/auth', authRoutes);
+app.use('/api/v1', apiRoutes);
+
+// middleware للتحقق من المسارات
+app.use((req, res, next) => {
+    const path = req.path;
+    console.log('التحقق من المسار:', path);
+
+    // تجاهل الملفات الثابتة
+    if (path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg)$/)) {
+        return next();
+    }
+
+    // تجاهل المسارات العامة
+    if (publicPaths.some(p => path.startsWith(p))) {
+        return next();
+    }
+
+    // التحقق من حالة المستخدم
+    if (!req.session || !req.session.userId) {
+        if (req.xhr || path.startsWith('/api/')) {
+            return res.status(401).json({
+                success: false,
+                error: 'يرجى تسجيل الدخول أولاً'
+            });
+        }
+        return res.redirect('/login.html?redirect=' + encodeURIComponent(path));
+    }
+
+    // المسارات المحمية تتطلب التحقق الكامل
+    if (protectedPaths.some(p => path.startsWith(p))) {
+        return validateSession(req, res, next);
+    }
+
+    // المسارات التي تتطلب تسجيل دخول فقط
+    if (authRequiredPaths.some(p => path.startsWith(p))) {
+        return next();
+    }
+
+    next();
+});
 
 // مسارات API المحمية
 app.use('/api/devices', validateSession, devicesRoutes);
@@ -171,15 +186,6 @@ app.use((err, req, res, next) => {
     }
     
     res.status(500).sendFile(path.join(__dirname, 'public', '500.html'));
-});
-
-// إضافة معالجة الأخطاء للجلسات
-app.use((err, req, res, next) => {
-    if (err.name === 'SessionError') {
-        console.error('خطأ في الجلسة:', err);
-        return res.redirect('/login.html');
-    }
-    next(err);
 });
 
 // بدء الخادم
