@@ -105,7 +105,15 @@ router.post('/add', validateSession, async (req, res) => {
                 console.log('تم استلام رمز QR جديد للجهاز:', deviceRef.id);
                 
                 // تحويل نص QR إلى صورة base64
-                const qrImage = await qrcode.toDataURL(qr);
+                const qrImage = await qrcode.toDataURL(qr, {
+                    errorCorrectionLevel: 'H',
+                    margin: 1,
+                    scale: 8,
+                    color: {
+                        dark: '#128C7E',
+                        light: '#FFFFFF'
+                    }
+                });
                 
                 // تخزين رمز QR في الذاكرة المؤقتة
                 qrCodes.set(deviceRef.id, qrImage);
@@ -113,9 +121,12 @@ router.post('/add', validateSession, async (req, res) => {
                 // تحديث حالة الجهاز
                 await deviceRef.update({
                     status: 'awaiting_scan',
+                    qrCode: qrImage,
                     'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
                     'metadata.qrRetries': admin.firestore.FieldValue.increment(1)
                 });
+
+                console.log('تم تحديث رمز QR بنجاح للجهاز:', deviceRef.id);
             } catch (error) {
                 console.error('خطأ في إنشاء رمز QR للجهاز:', deviceRef.id, error);
                 await handleDeviceError(deviceRef, error);

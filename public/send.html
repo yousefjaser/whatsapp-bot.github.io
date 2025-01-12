@@ -593,7 +593,7 @@
         async function startQRCheck(deviceId) {
             if (qrCheckInterval) clearInterval(qrCheckInterval);
             
-            qrCheckInterval = setInterval(async () => {
+            const checkQR = async () => {
                 try {
                     const response = await fetch(`/api/devices/qr/${deviceId}`);
                     if (!response.ok) {
@@ -607,21 +607,28 @@
                                 <img src="${data.qrCode}" alt="رمز QR" class="img-fluid">
                             </div>
                             <p class="text-center mt-3">امسح رمز QR باستخدام تطبيق واتساب على هاتفك</p>
-                            <p class="text-center text-muted small">سيتم تحديث الرمز تلقائياً كل دقيقتين</p>
+                            <p class="text-center text-muted small">يرجى فتح واتساب > القائمة > الأجهزة المرتبطة > ربط جهاز</p>
                         `;
+                    } else {
+                        showError('لم يتم العثور على رمز QR');
                     }
                 } catch (error) {
                     console.error('خطأ في جلب رمز QR:', error);
-                    clearInterval(qrCheckInterval);
                     showError('فشل في جلب رمز QR');
                 }
-            }, 5000); // التحقق كل 5 ثواني
+            };
+
+            // التحقق فوراً
+            await checkQR();
+            
+            // ثم كل 5 ثواني
+            qrCheckInterval = setInterval(checkQR, 5000);
         }
 
         async function startStatusCheck(deviceId) {
             if (statusCheckInterval) clearInterval(statusCheckInterval);
             
-            statusCheckInterval = setInterval(async () => {
+            const checkStatus = async () => {
                 try {
                     const response = await fetch(`/api/devices/status/${deviceId}`);
                     if (!response.ok) {
@@ -629,37 +636,44 @@
                     }
                     
                     const data = await response.json();
-                    if (data.success && data.status === 'connected') {
-                        clearInterval(qrCheckInterval);
-                        clearInterval(statusCheckInterval);
-                        
-                        // عرض معلومات الملف الشخصي
-                        document.getElementById('qrContainer').style.display = 'none';
-                        document.getElementById('profileContainer').style.display = 'block';
-                        
-                        if (data.profile) {
-                            document.getElementById('profileImage').src = data.profile.picture || 'default-profile.png';
-                            document.getElementById('profileName').textContent = data.profile.name || 'مستخدم واتساب';
-                            document.getElementById('profilePhone').textContent = data.profile.phone || '';
+                    if (data.success) {
+                        if (data.status === 'connected' || data.status === 'authenticated') {
+                            clearInterval(qrCheckInterval);
+                            clearInterval(statusCheckInterval);
+                            
+                            // عرض معلومات الملف الشخصي
+                            document.getElementById('qrContainer').style.display = 'none';
+                            document.getElementById('profileContainer').style.display = 'block';
+                            
+                            if (data.profile) {
+                                document.getElementById('profileImage').src = data.profile.picture || 'default-profile.png';
+                                document.getElementById('profileName').textContent = data.profile.name || 'مستخدم واتساب';
+                                document.getElementById('profilePhone').textContent = data.profile.phone || '';
+                            }
+                            
+                            showSuccess('تم الاتصال بنجاح!');
+                            
+                            // تحديث قائمة الأجهزة
+                            socket.emit('getDevices');
+                            
+                            // إغلاق المودال بعد 3 ثواني
+                            setTimeout(() => {
+                                const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
+                                if (modal) modal.hide();
+                            }, 3000);
+                        } else if (data.status === 'error') {
+                            showError('حدث خطأ في الاتصال: ' + (data.error || 'خطأ غير معروف'));
+                            clearInterval(statusCheckInterval);
                         }
-                        
-                        showSuccess('تم الاتصال بنجاح!');
-                        
-                        // تحديث قائمة الأجهزة
-                        socket.emit('getDevices');
-                        
-                        // إغلاق المودال بعد 3 ثواني
-                        setTimeout(() => {
-                            const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
-                            modal.hide();
-                        }, 3000);
                     }
                 } catch (error) {
                     console.error('خطأ في التحقق من حالة الجهاز:', error);
-                    clearInterval(statusCheckInterval);
                     showError('فشل في التحقق من حالة الجهاز');
                 }
-            }, 2000);
+            };
+
+            // التحقق كل ثانيتين
+            statusCheckInterval = setInterval(checkStatus, 2000);
         }
 
         function showSuccess(message) {
