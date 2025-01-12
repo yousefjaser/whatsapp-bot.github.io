@@ -3,6 +3,42 @@ const router = express.Router();
 const admin = require('firebase-admin');
 const bcrypt = require('bcryptjs');
 
+// قائمة المسارات المسموح بها بدون تسجيل دخول
+const publicPaths = [
+    '/',
+    '/login',
+    '/register',
+    '/reset-password',
+    '/api-docs.html',
+    '/api-dashboard.html',
+    '/docs.html',
+    '/css',
+    '/js',
+    '/images',
+    '/favicon.ico'
+];
+
+// التحقق من الجلسة
+const validateSession = async (req, res, next) => {
+    // السماح بالوصول للمسارات العامة
+    if (publicPaths.some(path => req.path.startsWith(path))) {
+        return next();
+    }
+
+    // التحقق من وجود جلسة
+    if (!req.session || !req.session.userId) {
+        if (req.xhr || req.path.startsWith('/api/')) {
+            return res.status(401).json({
+                success: false,
+                error: 'غير مصرح بالوصول'
+            });
+        }
+        return res.redirect('/login.html');
+    }
+
+    next();
+};
+
 // تسجيل الدخول
 router.post('/login', async (req, res) => {
     try {

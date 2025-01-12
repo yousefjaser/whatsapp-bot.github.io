@@ -1,43 +1,38 @@
 const admin = require('firebase-admin');
 
-// التحقق من صحة الجلسة
+// قائمة المسارات المسموح بها بدون تسجيل دخول
+const publicPaths = [
+    '/',
+    '/login.html',
+    '/register.html',
+    '/reset-password.html',
+    '/api-docs.html',
+    '/api-dashboard.html',
+    '/docs.html',
+    '/css',
+    '/js',
+    '/images',
+    '/favicon.ico'
+];
+
+// التحقق من الجلسة
 const validateSession = async (req, res, next) => {
     try {
+        // السماح بالوصول للمسارات العامة
+        if (publicPaths.some(path => req.path.startsWith(path))) {
+            return next();
+        }
+
         // التحقق من وجود جلسة
         if (!req.session || !req.session.userId) {
-            return res.status(401).json({
-                success: false,
-                error: 'غير مصرح بالوصول',
-                details: 'يجب تسجيل الدخول أولاً'
-            });
+            if (req.xhr || req.path.startsWith('/api/')) {
+                return res.status(401).json({
+                    success: false,
+                    error: 'غير مصرح بالوصول'
+                });
+            }
+            return res.redirect('/login.html');
         }
-
-        // التحقق من وجود المستخدم في Firestore
-        const userDoc = await admin.firestore()
-            .collection('users')
-            .doc(req.session.userId)
-            .get();
-
-        if (!userDoc.exists) {
-            // إذا لم يتم العثور على المستخدم، قم بإنهاء الجلسة
-            req.session.destroy();
-            return res.status(401).json({
-                success: false,
-                error: 'غير مصرح بالوصول',
-                details: 'المستخدم غير موجود'
-            });
-        }
-
-        // إضافة بيانات المستخدم للطلب
-        req.user = {
-            id: userDoc.id,
-            ...userDoc.data()
-        };
-
-        // تحديث وقت آخر نشاط
-        await userDoc.ref.update({
-            lastActivity: admin.firestore.FieldValue.serverTimestamp()
-        });
 
         next();
     } catch (error) {
@@ -49,6 +44,4 @@ const validateSession = async (req, res, next) => {
     }
 };
 
-module.exports = {
-    validateSession
-}; 
+module.exports = { validateSession }; 
