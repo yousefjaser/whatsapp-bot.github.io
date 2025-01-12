@@ -94,6 +94,14 @@ app.use((err, req, res, next) => {
     });
 });
 
+app.get('/', (req, res) => {
+    if (req.session && req.session.userId) {
+        res.redirect('/home.html');
+    } else {
+        res.redirect('/welcome.html');
+    }
+});
+
 // بدء الخادم
 app.listen(port, '0.0.0.0', () => {
     console.log(`الخادم يعمل على المنفذ ${port}`);

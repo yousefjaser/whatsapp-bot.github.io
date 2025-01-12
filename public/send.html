@@ -15,47 +15,72 @@
             --text-color: #333;
             --card-bg: #fff;
             --border-color: #ddd;
-            --whatsapp-bg: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAGlSURBVDhPY/j//z8K9pz6HwUzMDAy4sWKxrIMykY6DK9fvWVQVpBj+PzpM4OltTnD7dt3GGRlpBlu3rzFICYmyvDt2zcGGxtrhrt37zPw8/MzPH/+nEFfX5fh4cNHDNLS0gzv3r1jMDMzZXj8+AmDiIgww8ePnxhsbCwZ7t17wMDLy8vw4sULBl1dbYZHj54wiIqKMHz48IHB2tqC4d69hwzc3FwMLwEGGhjoMTx+/BRuIBsba0RACvAzPH/xEsVAkLNBBvJwczO8fPUaxUBWVlaGt+/eowWsAD8/w4uXr+AGgrwMUrSytGC4d/8hXJyFhZnh3ft3cANZmJkZbKwtGO7ee4Ai+f7DBxQD37//wGBtacZw9959uOSHDx9RDGT6/+8/g7WVOcPde/fhkh8/fmRgYkKkGAYGBgYbG0uGe/cfMPDwcDN8/PiJwcTYiOHx4ycMwkKCDB8/fWawt7dluH37LgMfHy/Dq1dvGIyNDBmePH3GICQkCE5bDg52DLdv32Xg5eVhePP2LYORoT7DM6AaDg52hrdv3zEYGuoz/Pv3l0FRUQEeXQDCIKXI9kELUAAAAABJRU5ErkJggg==');
+            --input-bg: #fff;
+            --input-color: #333;
         }
 
         [data-theme="dark"] {
-            --bg-color: #1a1a1a;
-            --text-color: #fff;
-            --card-bg: #2d2d2d;
-            --border-color: #404040;
-            --input-bg: #333;
-            --input-color: #fff;
-            --input-border: #555;
+            --bg-color: #111b21;
+            --text-color: #e9edef;
+            --card-bg: #1f2c33;
+            --border-color: #374045;
+            --input-bg: #2a3942;
+            --input-color: #e9edef;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
-            transition: all 0.3s ease;
-        }
-
-        .navbar {
-            background-color: var(--primary-color) !important;
         }
 
         .card {
             background-color: var(--card-bg);
             border-color: var(--border-color);
-            transition: all 0.3s ease;
+            color: var(--text-color);
         }
 
         .form-control, .form-select {
-            background-color: var(--input-bg, var(--card-bg));
-            border-color: var(--input-border, var(--border-color));
-            color: var(--input-color, var(--text-color));
+            background-color: var(--input-bg);
+            border-color: var(--border-color);
+            color: var(--input-color);
         }
 
-        .form-control:focus, .form-select:focus {
-            background-color: var(--input-bg, var(--card-bg));
-            border-color: var(--primary-color);
-            color: var(--input-color, var(--text-color));
-            box-shadow: 0 0 0 0.25rem rgba(18, 140, 126, 0.25);
+        .modal-content {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+
+        .modal-header {
+            border-bottom-color: var(--border-color);
+        }
+
+        .modal-footer {
+            border-top-color: var(--border-color);
+        }
+
+        .qr-container {
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px auto;
+            max-width: 300px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        #qrCode img {
+            width: 100%;
+            max-width: 250px;
+            height: auto;
+        }
+
+        .btn-close {
+            filter: invert(1) grayscale(100%) brightness(200%);
+        }
+
+        .navbar {
+            background-color: var(--primary-color) !important;
         }
 
         .device-card {
@@ -104,20 +129,6 @@
             padding: 5px 10px;
             border-radius: 20px;
             color: white;
-        }
-
-        .modal-content {
-            background-color: var(--card-bg);
-            color: var(--text-color);
-        }
-
-        .qr-container {
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            margin: 20px auto;
-            max-width: 300px;
         }
 
         .profile-container {
@@ -249,23 +260,24 @@
 
     <!-- مودال إضافة جهاز -->
     <div class="modal fade" id="deviceModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">إضافة جهاز جديد</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body text-center">
                     <div id="qrContainer" class="qr-container">
-                        <div class="spinner-border text-primary" role="status">
+                        <div class="spinner-border text-primary mb-3" role="status">
                             <span class="visually-hidden">جاري التحميل...</span>
                         </div>
-                        <div id="qrCode" style="display: none;"></div>
+                        <p class="mb-0">جاري تحضير رمز QR...</p>
+                        <div id="qrCode" class="mt-3" style="display: none;"></div>
                     </div>
                     <div id="profileContainer" class="profile-container" style="display: none;">
                         <img id="profileImage" class="profile-image" src="" alt="الصورة الشخصية">
                         <h4 id="profileName" class="mb-2"></h4>
-                        <p id="profilePhone" class="text-muted"></p>
+                        <p id="profilePhone" class="text-muted mb-0"></p>
                     </div>
                 </div>
             </div>
@@ -419,9 +431,18 @@
         // إضافة جهاز جديد
         async function addNewDevice() {
             const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
-            modal.show();
+            const qrContainer = document.getElementById('qrContainer');
+            const qrCode = document.getElementById('qrCode');
+            const spinner = document.querySelector('#qrContainer .spinner-border');
+            const loadingText = document.querySelector('#qrContainer p');
             
             try {
+                modal.show();
+                // إظهار حالة التحميل
+                spinner.style.display = 'block';
+                loadingText.style.display = 'block';
+                qrCode.style.display = 'none';
+                
                 const response = await fetch('/api/devices/add', {
                     method: 'POST',
                     headers: {
@@ -432,29 +453,58 @@
 
                 const data = await response.json();
                 
-                if (response.ok) {
-                    // عرض رمز QR
-                    document.getElementById('qrCode').innerHTML = `<img src="${data.qr}" alt="رمز QR">`;
-                    document.getElementById('qrCode').style.display = 'block';
-                    document.querySelector('#qrContainer .spinner-border').style.display = 'none';
-                    
-                    // بدء التحقق من حالة الاتصال
-                    checkConnectionStatus(data.deviceId);
-                } else {
-                    alert(data.error || 'حدث خطأ في إضافة الجهاز');
-                    modal.hide();
+                if (!response.ok) {
+                    throw new Error(data.error || 'حدث خطأ في إضافة الجهاز');
                 }
+                
+                if (!data.qr) {
+                    throw new Error('لم يتم استلام رمز QR من الخادم');
+                }
+
+                // عرض رمز QR
+                qrCode.innerHTML = `
+                    <img src="${data.qr}" 
+                         alt="رمز QR" 
+                         class="img-fluid"
+                         onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjE0Ij7Yrdiv2Ksg2K7Yt9ijPC90ZXh0Pjwvc3ZnPg==';">
+                `;
+                qrCode.style.display = 'block';
+                spinner.style.display = 'none';
+                loadingText.style.display = 'none';
+                
+                // بدء التحقق من حالة الاتصال
+                checkConnectionStatus(data.deviceId);
             } catch (error) {
                 console.error('خطأ:', error);
-                alert('حدث خطأ في الاتصال بالخادم');
-                modal.hide();
+                qrContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        ${error.message || 'حدث خطأ في الاتصال بالخادم'}
+                    </div>
+                    <button class="btn btn-primary mt-3" onclick="retryAddDevice()">
+                        <i class="bi bi-arrow-clockwise"></i> إعادة المحاولة
+                    </button>
+                `;
             }
+        }
+
+        // إعادة محاولة إضافة جهاز
+        function retryAddDevice() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
+            modal.hide();
+            setTimeout(() => {
+                addNewDevice();
+            }, 500);
         }
 
         // التحقق من حالة الاتصال
         function checkConnectionStatus(deviceId) {
+            let attempts = 0;
+            const maxAttempts = 30; // 1 دقيقة كحد أقصى
+            
             const checkInterval = setInterval(async () => {
                 try {
+                    attempts++;
                     const response = await fetch(`/api/devices/${deviceId}/status`);
                     const data = await response.json();
                     
@@ -462,9 +512,9 @@
                         clearInterval(checkInterval);
                         // عرض معلومات الملف الشخصي
                         document.getElementById('qrContainer').style.display = 'none';
-                        document.getElementById('profileImage').src = data.profileImage;
-                        document.getElementById('profileName').textContent = data.name;
-                        document.getElementById('profilePhone').textContent = `${data.countryCode} ${data.phone}`;
+                        document.getElementById('profileImage').src = data.profileImage || 'path/to/default-avatar.png';
+                        document.getElementById('profileName').textContent = data.name || 'مستخدم واتساب';
+                        document.getElementById('profilePhone').textContent = `${data.countryCode || ''} ${data.phone || ''}`;
                         document.getElementById('profileContainer').style.display = 'block';
                         
                         // تحديث قائمة الأجهزة
@@ -472,8 +522,20 @@
                         
                         // إغلاق المودال بعد 3 ثواني
                         setTimeout(() => {
-                            bootstrap.Modal.getInstance(document.getElementById('deviceModal')).hide();
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
+                            if (modal) modal.hide();
                         }, 3000);
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        document.getElementById('qrContainer').innerHTML = `
+                            <div class="alert alert-warning">
+                                <i class="bi bi-clock-history"></i>
+                                انتهت مهلة الانتظار. يرجى المحاولة مرة أخرى.
+                            </div>
+                            <button class="btn btn-primary mt-3" onclick="retryAddDevice()">
+                                <i class="bi bi-arrow-clockwise"></i> إعادة المحاولة
+                            </button>
+                        `;
                     }
                 } catch (error) {
                     console.error('خطأ في التحقق من حالة الاتصال:', error);
