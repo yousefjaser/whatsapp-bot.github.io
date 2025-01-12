@@ -52,13 +52,22 @@ const validateSession = async (req, res, next) => {
             return res.redirect('/login.html?redirect=' + encodeURIComponent(req.path));
         }
 
-        // التحقق من صلاحية الجلسة
+        // التحقق من صلاحية الجلسة باستخدام Firestore
         try {
-            const sessionUser = await admin.auth().getUser(req.session.userId);
-            if (!sessionUser) {
+            const userDoc = await admin.firestore()
+                .collection('users')
+                .doc(req.session.userId)
+                .get();
+
+            if (!userDoc.exists) {
                 throw new Error('المستخدم غير موجود');
             }
-            req.user = sessionUser;
+
+            const userData = userDoc.data();
+            req.user = {
+                id: userDoc.id,
+                ...userData
+            };
             next();
         } catch (error) {
             console.error('خطأ في التحقق من المستخدم:', error);
