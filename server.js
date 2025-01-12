@@ -68,18 +68,14 @@ app.use('/api/v1', apiRoutes);
 // المسارات المحمية
 const { validateSession } = require('./middleware/auth');
 
-// التحقق من المصادقة للمسارات المحمية فقط
-const protectedPaths = [
-    '/home.html',
-    '/send.html',
-    '/profile.html',
-    '/api/devices',
-    '/api/whatsapp'
-];
+// تطبيق المصادقة على المسارات المحمية
+app.get('/home.html', validateSession);
+app.get('/send.html', validateSession);
+app.get('/profile.html', validateSession);
 
-app.use(protectedPaths, validateSession);
-app.use('/api/devices', devicesRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
+// تطبيق المصادقة على مسارات API المحمية
+app.use('/api/devices', validateSession, devicesRoutes);
+app.use('/api/whatsapp', validateSession, whatsappRoutes);
 
 // التوجيه الرئيسي
 app.get('/', (req, res) => {
