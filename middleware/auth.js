@@ -6,6 +6,11 @@ const validateSession = async (req, res, next) => {
     console.log('بدء التحقق من الجلسة للمسار:', path);
     
     try {
+        // تجنب التوجيه المتكرر
+        if (path === '/login.html') {
+            return next();
+        }
+
         // التحقق من وجود جلسة صالحة
         if (!req.session) {
             console.log('لا توجد جلسة للمسار:', path);
@@ -57,6 +62,11 @@ const validateSession = async (req, res, next) => {
 const handleAuthError = (req, res, message) => {
     const path = req.path;
     console.log('معالجة خطأ المصادقة للمسار:', path, 'الرسالة:', message);
+
+    // تجنب التوجيه المتكرر
+    if (path === '/login.html') {
+        return next();
+    }
 
     if (req.xhr || path.startsWith('/api/')) {
         return res.status(401).json({

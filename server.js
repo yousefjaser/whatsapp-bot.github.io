@@ -86,12 +86,22 @@ app.use((req, res, next) => {
     }
 
     // تجاهل المسارات العامة
-    if (path === '/' || path === '/welcome.html' || path === '/login.html' || path === '/register.html') {
+    if (path === '/' || 
+        path === '/welcome.html' || 
+        path === '/login.html' || 
+        path === '/register.html' ||
+        path === '/api/auth/login' ||
+        path === '/api/auth/register' ||
+        path === '/api/auth/status') {
         return next();
     }
 
     // التحقق من حالة المستخدم
     if (!req.session || !req.session.userId) {
+        // تجنب التوجيه المتكرر إذا كان المستخدم بالفعل في صفحة تسجيل الدخول
+        if (path === '/login.html') {
+            return next();
+        }
         console.log('مستخدم غير مسجل يحاول الوصول إلى:', path);
         return res.redirect('/login.html?redirect=' + encodeURIComponent(path));
     }
@@ -101,7 +111,7 @@ app.use((req, res, next) => {
         return validateSession(req, res, next);
     }
 
-    // المسارات التي تتطلب تسجيل الدخول فقط
+    // المسارات التي تتطلب تسجيل دخول فقط
     if (authRequiredFiles.includes(path)) {
         console.log('مستخدم مسجل يحاول الوصول إلى:', path);
         return next();
@@ -116,7 +126,11 @@ app.use(express.static('public', {
     extensions: ['html'],
     setHeaders: (res, path, stat) => {
         if (path.endsWith('.html')) {
-            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            res.set({
+                'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
         }
     }
 }));
