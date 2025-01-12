@@ -352,6 +352,82 @@ router.get('/session/:deviceId', validateSession, async (req, res) => {
     }
 });
 
+// فصل جهاز
+router.post('/:deviceId/disconnect', validateSession, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const userId = req.session.userId;
+
+        // التحقق من ملكية الجهاز
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
+        }
+
+        // الحصول على العميل من الذاكرة المؤقتة
+        const client = clients.get(deviceId);
+        if (client) {
+            try {
+                await client.destroy();
+            } catch (error) {
+                console.error('خطأ في تدمير العميل:', error);
+            }
+            clients.delete(deviceId);
+        }
+
+        // تحديث حالة الجهاز في Firestore
+        await deviceRef.update({
+            status: 'disconnected',
+            sessionData: admin.firestore.FieldValue.delete(),
+            lastConnection: admin.firestore.FieldValue.serverTimestamp(),
+            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
+            'metadata.disconnectedAt': admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // إزالة رمز QR من الذاكرة المؤقتة
+        qrCodes.delete(deviceId);
+
+        res.json({
+            success: true,
+            message: 'تم فصل الجهاز بنجاح'
+        });
+
+    } catch (error) {
+        console.error('خطأ في فصل الجهاز:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في فصل الجهاز'
+        });
+    }
+});
+
+// تحسين معالجة الأحداث في إضافة جهاز جديد
+client.on('ready', async () => {
+    try {
+        console.log('تم الاتصال بنجاح للجهاز:', deviceRef.id);
+        
+        // تحديث حالة الجهاز
+        await deviceRef.update({
+            status: 'connected',
+            lastConnection: admin.firestore.FieldValue.serverTimestamp(),
+            'metadata.lastUpdate': admin.firestore.FieldValue.serverTimestamp(),
+            'metadata.connectedAt': admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // إزالة رمز QR من الذاكرة المؤقتة
+        qrCodes.delete(deviceRef.id);
+
+    } catch (error) {
+        console.error('خطأ في تحديث حالة الاتصال:', error);
+        await handleDeviceError(deviceRef, error);
+    }
+});
+
 // دالة مساعدة لمعالجة الأخطاء
 async function handleDeviceError(deviceRef, error) {
     try {

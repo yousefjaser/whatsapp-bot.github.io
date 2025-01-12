@@ -323,25 +323,72 @@
             const devicesList = document.getElementById('devicesList');
             devicesList.innerHTML = '';
 
+            if (!Array.isArray(devices) || devices.length === 0) {
+                devicesList.innerHTML = '<div class="text-center text-muted">لا توجد أجهزة متصلة</div>';
+                return;
+            }
+
             devices.forEach(device => {
                 const deviceCard = document.createElement('div');
                 deviceCard.className = 'device-card p-3 mb-3';
                 deviceCard.innerHTML = `
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="device-status ${device.connected ? 'status-connected' : 'status-disconnected'}"></span>
+                            <span class="device-status ${device.status === 'connected' ? 'text-success' : 'text-danger'}">
+                                <i class="bi ${device.status === 'connected' ? 'bi-check-circle-fill' : 'bi-x-circle-fill'}"></i>
+                            </span>
                             <strong>${device.name || 'جهاز'}</strong>
                         </div>
-                        <button class="btn btn-sm btn-primary" onclick="selectDevice('${device.id}', '${device.name}')">
-                            اختيار
-                        </button>
+                        <div>
+                            <button class="btn btn-sm btn-primary" onclick="selectDevice('${device.id}', '${device.name}')">
+                                اختيار
+                            </button>
+                            ${device.status === 'connected' ? `
+                                <button class="btn btn-sm btn-danger ms-1" onclick="disconnectDevice('${device.id}')">
+                                    <i class="bi bi-power"></i>
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                     <div class="mt-2">
+                        <small class="text-muted">الحالة: ${getStatusText(device.status)}</small>
+                        <br>
                         <small class="text-muted">معرف الجهاز: ${device.id}</small>
                     </div>
                 `;
                 devicesList.appendChild(deviceCard);
             });
+        }
+
+        function getStatusText(status) {
+            const statusMap = {
+                'connected': 'متصل',
+                'disconnected': 'غير متصل',
+                'awaiting_scan': 'في انتظار المسح',
+                'error': 'حدث خطأ',
+                'initializing': 'جاري التهيئة'
+            };
+            return statusMap[status] || status;
+        }
+
+        // دالة لفصل الجهاز
+        async function disconnectDevice(deviceId) {
+            try {
+                const response = await fetch(`/api/devices/${deviceId}/disconnect`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showAlert('success', 'تم فصل الجهاز بنجاح');
+                    socket.emit('getDevices'); // تحديث قائمة الأجهزة
+                } else {
+                    throw new Error(data.error || 'فشل في فصل الجهاز');
+                }
+            } catch (error) {
+                console.error('خطأ في فصل الجهاز:', error);
+                showAlert('danger', error.message);
+            }
         }
 
         // اختيار جهاز
@@ -557,37 +604,41 @@
             statusCheckInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`/api/devices`);
+                    if (!response.ok) {
+                        throw new Error('فشل في جلب حالة الجهاز');
+                    }
+                    
                     const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.error || 'حدث خطأ في جلب حالة الجهاز');
+                    }
 
-                    if (data.success) {
-                        const device = data.devices.find(d => d.id === deviceId);
+                    const device = data.devices.find(d => d.id === deviceId);
+                    if (!device) {
+                        throw new Error('لم يتم العثور على الجهاز');
+                    }
+                    
+                    console.log('حالة الجهاز:', device.status); // للتشخيص
+                    
+                    if (device.status === 'connected') {
+                        clearIntervals();
+                        showSuccess('تم الاتصال بنجاح! جاري إغلاق النافذة...');
+                        socket.emit('getDevices'); // تحديث قائمة الأجهزة
                         
-                        if (device) {
-                            if (device.status === 'connected') {
-                                // إيقاف الفحص عند الاتصال
-                                clearInterval(qrCheckInterval);
-                                clearInterval(statusCheckInterval);
-
-                                // عرض رسالة النجاح
-                                showSuccess('تم الاتصال بنجاح! جاري إغلاق النافذة...');
-                                
-                                // تحديث قائمة الأجهزة
-                                loadDevices();
-                                
-                                // إغلاق المودال بعد 3 ثواني
-                                setTimeout(() => {
-                                    const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
-                                    modal.hide();
-                                }, 3000);
-                            } else if (device.status === 'error') {
-                                clearInterval(qrCheckInterval);
-                                clearInterval(statusCheckInterval);
-                                showError('حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.');
-                            }
-                        }
+                        setTimeout(() => {
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
+                            if (modal) modal.hide();
+                        }, 3000);
+                    } else if (device.status === 'error' || device.status === 'disconnected') {
+                        clearIntervals();
+                        showError('فشل الاتصال. يرجى المحاولة مرة أخرى.');
+                    } else if (device.status === 'awaiting_scan') {
+                        // استمر في الانتظار
+                        console.log('في انتظار مسح رمز QR...');
                     }
                 } catch (error) {
                     console.error('خطأ في فحص حالة الاتصال:', error);
+                    showError(error.message);
                 }
             }, 2000);
         }
