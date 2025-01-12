@@ -29,8 +29,9 @@ app.use(express.json());
 app.use(cookieParser());
 
 // إعداد الجلسات
+const sessionSecret = process.env.SESSION_SECRET || '20gkhCs61BZKI6vUO1hxlC2ydYS2';
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -102,7 +103,27 @@ app.use((req, res) => {
 // معالجة الأخطاء
 app.use((err, req, res, next) => {
     console.error('خطأ:', err);
-    
+
+    // التحقق من نوع الخطأ
+    if (err.name === 'SessionError') {
+        return res.redirect('/login.html');
+    }
+
+    if (err.name === 'FirebaseError') {
+        return res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في الاتصال بقاعدة البيانات'
+        });
+    }
+
+    if (err.name === 'SyntaxError' && err.type === 'entity.parse.failed') {
+        return res.status(400).json({
+            success: false,
+            error: 'بيانات غير صالحة'
+        });
+    }
+
+    // التحقق من نوع الطلب
     if (req.path.startsWith('/api/')) {
         return res.status(500).json({
             success: false,
@@ -113,8 +134,32 @@ app.use((err, req, res, next) => {
     res.status(500).sendFile(path.join(__dirname, 'public', '500.html'));
 });
 
+// إضافة معالجة الأخطاء للجلسات
+app.use((err, req, res, next) => {
+    if (err.name === 'SessionError') {
+        console.error('خطأ في الجلسة:', err);
+        return res.redirect('/login.html');
+    }
+    next(err);
+});
+
+// التحقق من تهيئة Firebase
+if (!admin.apps.length) {
+    try {
+        admin.initializeApp({
+            credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_CONFIG))
+        });
+        console.log('تم الاتصال بـ Firebase بنجاح');
+    } catch (error) {
+        console.error('خطأ في الاتصال بـ Firebase:', error);
+        process.exit(1);
+    }
+}
+
 // بدء الخادم
 app.listen(port, '0.0.0.0', () => {
     console.log(`الخادم يعمل على المنفذ ${port}`);
     console.log(`عنوان الموقع: ${process.env.BASE_URL || `http://localhost:${port}`}`);
+    console.log('حالة البيئة:', process.env.NODE_ENV);
+    console.log('تم تهيئة الجلسات بنجاح');
 }); 
