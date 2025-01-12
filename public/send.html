@@ -281,6 +281,7 @@
         let qrCheckInterval = null;
         let statusCheckInterval = null;
         let currentDeviceId = null;
+        let selectedDeviceId = null;
 
         // التحقق من الوضع المظلم
         function initTheme() {
@@ -490,6 +491,7 @@
         // تهيئة الصفحة
         window.addEventListener('load', () => {
             initTheme();
+            socket = io();
             // جلب قائمة الأجهزة عند تحميل الصفحة
             socket.emit('getDevices');
         });
@@ -497,46 +499,35 @@
         // إضافة جهاز جديد
         async function addNewDevice() {
             try {
-                // إظهار رسالة التحميل
-                showLoading('جاري إضافة جهاز جديد...');
+                const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
+                modal.show();
                 
-                const deviceName = `جهاز ${new Date().toLocaleTimeString('ar-SA')}`;
+                showLoading('جاري إضافة جهاز جديد...');
                 
                 const response = await fetch('/api/devices/add', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ name: deviceName })
+                    body: JSON.stringify({ 
+                        name: `جهاز ${new Date().toLocaleTimeString('ar-SA')}` 
+                    })
                 });
 
                 const data = await response.json();
                 
                 if (data.success) {
                     currentDeviceId = data.deviceId;
-                    
-                    // إخفاء رسالة التحميل وإظهار رمز QR
                     hideLoading();
-                    showQRLoading();
-                    
-                    // بدء فحص رمز QR
+                    document.getElementById('qrContainer').style.display = 'block';
                     startQRCheck(currentDeviceId);
-                    
-                    // بدء فحص حالة الاتصال
                     startStatusCheck(currentDeviceId);
-                    
-                    // إظهار المودال
-                    const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
-                    modal.show();
-                    
-                    // إضافة مستمع لإغلاق المودال
-                    document.getElementById('deviceModal').addEventListener('hidden.bs.modal', clearIntervals);
                 } else {
-                    showError(data.error || 'حدث خطأ في إضافة الجهاز');
+                    throw new Error(data.error || 'حدث خطأ في إضافة الجهاز');
                 }
             } catch (error) {
                 console.error('خطأ:', error);
-                showError('حدث خطأ في إضافة الجهاز');
+                showError(error.message || 'حدث خطأ في إضافة الجهاز');
             }
         }
 
@@ -552,215 +543,106 @@
         }
 
         async function startQRCheck(deviceId) {
-            // مسح الفاصل الزمني السابق إذا وجد
-            if (qrCheckInterval) {
-                clearInterval(qrCheckInterval);
-            }
+            if (qrCheckInterval) clearInterval(qrCheckInterval);
             
-            // بدء فحص رمز QR كل ثانيتين
             qrCheckInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`/api/devices/qr/${deviceId}`);
-                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error('فشل في جلب رمز QR');
+                    }
                     
+                    const data = await response.json();
                     if (data.success && data.qrCode) {
-                        // عرض رمز QR
                         document.getElementById('qrContainer').innerHTML = `
-                            <div class="text-center">
-                                <img src="${data.qrCode}" alt="رمز QR" class="img-fluid mb-3" style="max-width: 300px;">
-                                <p class="text-muted">امسح رمز QR باستخدام تطبيق واتساب على هاتفك</p>
+                            <div class="qr-code">
+                                <img src="${data.qrCode}" alt="رمز QR" class="img-fluid">
                             </div>
+                            <p class="text-center mt-3">امسح رمز QR باستخدام تطبيق واتساب على هاتفك</p>
                         `;
                     }
                 } catch (error) {
                     console.error('خطأ في جلب رمز QR:', error);
+                    clearInterval(qrCheckInterval);
+                    showError('فشل في جلب رمز QR');
                 }
             }, 2000);
         }
 
         async function startStatusCheck(deviceId) {
-            // مسح الفاصل الزمني السابق إذا وجد
-            if (statusCheckInterval) {
-                clearInterval(statusCheckInterval);
-            }
+            if (statusCheckInterval) clearInterval(statusCheckInterval);
             
-            // بدء فحص حالة الاتصال كل ثانيتين
             statusCheckInterval = setInterval(async () => {
                 try {
-                    const response = await fetch(`/api/devices/profile/${deviceId}`);
-                    const data = await response.json();
+                    const response = await fetch(`/api/devices/status/${deviceId}`);
+                    if (!response.ok) {
+                        throw new Error('فشل في التحقق من حالة الجهاز');
+                    }
                     
-                    if (data.success && data.profile) {
-                        // تم الاتصال بنجاح
-                        showSuccess('تم الاتصال بنجاح! جاري إغلاق النافذة...');
+                    const data = await response.json();
+                    if (data.success && data.status === 'connected') {
+                        clearInterval(qrCheckInterval);
+                        clearInterval(statusCheckInterval);
                         
-                        // إيقاف الفواصل الزمنية
-                        clearIntervals();
+                        // عرض معلومات الملف الشخصي
+                        document.getElementById('qrContainer').style.display = 'none';
+                        document.getElementById('profileContainer').style.display = 'block';
+                        
+                        if (data.profile) {
+                            document.getElementById('profileImage').src = data.profile.picture || 'default-profile.png';
+                            document.getElementById('profileName').textContent = data.profile.name || 'مستخدم واتساب';
+                            document.getElementById('profilePhone').textContent = data.profile.phone || '';
+                        }
+                        
+                        showSuccess('تم الاتصال بنجاح!');
                         
                         // تحديث قائمة الأجهزة
-                        await updateDevicesList();
+                        socket.emit('getDevices');
                         
                         // إغلاق المودال بعد 3 ثواني
                         setTimeout(() => {
                             const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
-                            if (modal) {
-                                modal.hide();
-                            }
+                            modal.hide();
                         }, 3000);
                     }
                 } catch (error) {
-                    console.error('خطأ في التحقق من حالة الاتصال:', error);
+                    console.error('خطأ في التحقق من حالة الجهاز:', error);
+                    clearInterval(statusCheckInterval);
+                    showError('فشل في التحقق من حالة الجهاز');
                 }
             }, 2000);
         }
 
-        async function updateDevicesList() {
-            try {
-                const response = await fetch('/api/devices');
-                const data = await response.json();
-                
-                if (data.success) {
-                    const deviceSelect = document.getElementById('deviceSelect');
-                    deviceSelect.innerHTML = '<option value="">اختر جهازاً...</option>';
-                    
-                    data.devices.forEach(device => {
-                        const option = document.createElement('option');
-                        option.value = device.id;
-                        option.textContent = `${device.name} ${device.connected ? '(متصل)' : '(غير متصل)'}`;
-                        deviceSelect.appendChild(option);
-                    });
-                }
-            } catch (error) {
-                console.error('خطأ في تحديث قائمة الأجهزة:', error);
-            }
-        }
-
-        function showError(message) {
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-danger alert-dismissible fade show';
-            alert.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.querySelector('.modal-body').prepend(alert);
-        }
-
-        function showSuccess(message) {
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-success alert-dismissible fade show';
-            alert.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.querySelector('.modal-body').prepend(alert);
-        }
-
-        // تنظيف الفواصل الزمنية عند إغلاق المودال
-        document.getElementById('deviceModal').addEventListener('hidden.bs.modal', () => {
-            clearIntervals();
-            document.getElementById('qrContainer').innerHTML = '';
-        });
-
-        // دالة للتحقق من حالة الاتصال
-        async function checkConnectionStatus(deviceId) {
-            try {
-                const response = await fetch(`/api/devices/profile/${deviceId}`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    // إخفاء QR code وعرض معلومات البروفايل
-                    const qrContainer = document.getElementById('qrContainer');
-                    const profileContainer = document.getElementById('profileContainer');
-                    
-                    qrContainer.style.display = 'none';
-                    profileContainer.style.display = 'block';
-                    
-                    // تحديث معلومات البروفايل
-                    const profileHtml = `
-                        <div class="text-center mb-3">
-                            <img src="${data.profile.profilePic}" class="rounded-circle profile-pic mb-2" alt="صورة البروفايل">
-                            <h5 class="mb-1">${data.profile.phoneNumber}</h5>
-                            <span class="badge bg-success">تم الاتصال بنجاح</span>
-                        </div>
-                    `;
-                    profileContainer.innerHTML = profileHtml;
-
-                    // إيقاف الفحص وإغلاق المودال بعد 3 ثواني
-                    clearInterval(statusCheckInterval);
-                    setTimeout(() => {
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('deviceModal'));
-                        modal.hide();
-                        // تحديث قائمة الأجهزة
-                        loadDevices();
-                    }, 3000);
-                }
-            } catch (error) {
-                console.error('خطأ في التحقق من حالة الاتصال:', error);
-            }
-        }
-
         function showLoading(message) {
-            const qrContainer = document.getElementById('qrContainer');
-            qrContainer.innerHTML = `
+            document.getElementById('qrContainer').innerHTML = `
                 <div class="text-center">
-                    <div class="spinner-border text-primary mb-3" role="status">
-                        <span class="visually-hidden">جاري التحميل...</span>
-                    </div>
+                    <div class="spinner-border text-primary mb-3"></div>
                     <p>${message}</p>
                 </div>
             `;
         }
 
-        function showQRLoading() {
-            const qrContainer = document.getElementById('qrContainer');
-            qrContainer.innerHTML = `
-                <div class="text-center">
-                    <div class="spinner-border text-primary mb-3" role="status">
-                        <span class="visually-hidden">جاري تحميل رمز QR...</span>
-                    </div>
-                    <p>جاري إنشاء رمز QR...</p>
-                </div>
-            `;
-        }
-
-        function hideLoading() {
-            const qrContainer = document.getElementById('qrContainer');
-            qrContainer.innerHTML = '';
-        }
-
         function showError(message) {
-            const qrContainer = document.getElementById('qrContainer');
-            qrContainer.innerHTML = `
-                <div class="alert alert-danger text-center" role="alert">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            document.getElementById('qrContainer').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
                     ${message}
                 </div>
             `;
         }
 
         function showSuccess(message) {
-            const qrContainer = document.getElementById('qrContainer');
-            qrContainer.innerHTML = `
-                <div class="alert alert-success text-center" role="alert">
-                    <i class="bi bi-check-circle-fill me-2"></i>
+            document.getElementById('qrContainer').innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle-fill"></i>
                     ${message}
                 </div>
             `;
         }
 
-        // تهيئة Socket.IO عند تحميل الصفحة
-        document.addEventListener('DOMContentLoaded', () => {
-            socket = io();
-            
-            // إضافة مستمعي الأحداث لـ Socket.IO
-            socket.on('connect', () => {
-                console.log('تم الاتصال بالخادم');
-            });
-            
-            socket.on('error', (error) => {
-                console.error('خطأ في الاتصال:', error);
-                showError('حدث خطأ في الاتصال بالخادم');
-            });
+        // تنظيف الفواصل الزمنية عند إغلاق المودال
+        document.getElementById('deviceModal').addEventListener('hidden.bs.modal', () => {
+            clearIntervals();
         });
     </script>
 </body>
