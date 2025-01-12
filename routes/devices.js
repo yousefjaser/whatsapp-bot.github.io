@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 const { validateSession } = require('../middleware/auth');
+const { Client } = require('whatsapp-web.js');
+const qrcode = require('qrcode');
+
+// تخزين مؤقت لرموز QR
+const qrCodes = new Map();
 
 // إضافة جهاز جديد
 router.post('/add', validateSession, async (req, res) => {
@@ -14,16 +19,60 @@ router.post('/add', validateSession, async (req, res) => {
             name: name || 'جهاز جديد',
             userId,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            status: 'pending', // pending, connected, disconnected
+            status: 'pending',
             lastConnection: null,
             isActive: true,
-            sessionData: null, // سيتم تخزين بيانات الجلسة هنا
+            sessionData: null,
             metadata: {
                 browser: req.headers['user-agent'],
                 ip: req.ip,
                 lastUpdate: admin.firestore.FieldValue.serverTimestamp()
             }
         });
+
+        // إنشاء عميل WhatsApp جديد
+        const client = new Client({
+            puppeteer: {
+                args: ['--no-sandbox']
+            }
+        });
+
+        // الاستماع لحدث QR
+        client.on('qr', async (qr) => {
+            try {
+                // تحويل نص QR إلى صورة base64
+                const qrImage = await qrcode.toDataURL(qr);
+                qrCodes.set(deviceRef.id, qrImage);
+                
+                // تحديث حالة الجهاز
+                await deviceRef.update({
+                    qrCode: qrImage,
+                    status: 'awaiting_scan'
+                });
+            } catch (error) {
+                console.error('خطأ في إنشاء رمز QR:', error);
+            }
+        });
+
+        // الاستماع لحدث الاتصال
+        client.on('ready', async () => {
+            try {
+                // تحديث حالة الجهاز عند الاتصال
+                await deviceRef.update({
+                    status: 'connected',
+                    lastConnection: admin.firestore.FieldValue.serverTimestamp(),
+                    qrCode: null
+                });
+                
+                // حذف رمز QR من التخزين المؤقت
+                qrCodes.delete(deviceRef.id);
+            } catch (error) {
+                console.error('خطأ في تحديث حالة الاتصال:', error);
+            }
+        });
+
+        // بدء العميل
+        client.initialize();
 
         res.json({
             success: true,
@@ -36,6 +85,47 @@ router.post('/add', validateSession, async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'حدث خطأ في إضافة الجهاز'
+        });
+    }
+});
+
+// الحصول على رمز QR
+router.get('/qr/:deviceId', validateSession, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const userId = req.session.userId;
+
+        // التحقق من ملكية الجهاز
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
+        }
+
+        // الحصول على رمز QR من التخزين المؤقت
+        const qrCode = qrCodes.get(deviceId);
+        
+        if (!qrCode) {
+            return res.status(404).json({
+                success: false,
+                error: 'رمز QR غير متوفر حالياً'
+            });
+        }
+
+        res.json({
+            success: true,
+            qrCode
+        });
+
+    } catch (error) {
+        console.error('خطأ في جلب رمز QR:', error);
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في جلب رمز QR'
         });
     }
 });

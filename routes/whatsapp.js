@@ -194,4 +194,90 @@ router.get('/session/status/:deviceId', validateSession, async (req, res) => {
     }
 });
 
+// إرسال رسالة
+router.post('/send', validateSession, async (req, res) => {
+    try {
+        const { deviceId, countryCode, phone, message } = req.body;
+        const userId = req.session.userId;
+
+        // التحقق من وجود جميع البيانات المطلوبة
+        if (!deviceId || !countryCode || !phone || !message) {
+            return res.status(400).json({
+                success: false,
+                error: 'جميع الحقول مطلوبة'
+            });
+        }
+
+        // التحقق من ملكية الجهاز
+        const deviceRef = admin.firestore().collection('devices').doc(deviceId);
+        const device = await deviceRef.get();
+
+        if (!device.exists || device.data().userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'غير مصرح باستخدام هذا الجهاز'
+            });
+        }
+
+        // التحقق من حالة الجهاز
+        const deviceData = device.data();
+        if (deviceData.status !== 'connected') {
+            return res.status(400).json({
+                success: false,
+                error: 'الجهاز غير متصل'
+            });
+        }
+
+        // الحصول على الجلسة النشطة
+        const session = activeSessions.get(deviceId);
+        if (!session || !session.client) {
+            return res.status(400).json({
+                success: false,
+                error: 'الجلسة غير موجودة'
+            });
+        }
+
+        // تنسيق رقم الهاتف
+        let formattedPhone = phone.replace(/\D/g, '');
+        if (formattedPhone.startsWith('0')) {
+            formattedPhone = formattedPhone.substring(1);
+        }
+        const fullPhone = `${countryCode.replace(/\D/g, '')}${formattedPhone}@c.us`;
+
+        // إرسال الرسالة
+        await session.client.sendMessage(fullPhone, message);
+
+        // تسجيل الرسالة في Firebase
+        await admin.firestore().collection('messages').add({
+            deviceId,
+            userId,
+            to: fullPhone,
+            message,
+            status: 'sent',
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        res.json({
+            success: true,
+            message: 'تم إرسال الرسالة بنجاح'
+        });
+
+    } catch (error) {
+        console.error('خطأ في إرسال الرسالة:', error);
+        
+        // التحقق من نوع الخطأ
+        if (error.message.includes('not-found') || error.message.includes('404')) {
+            return res.status(404).json({
+                success: false,
+                error: 'رقم الهاتف غير موجود على واتساب'
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            error: 'حدث خطأ في إرسال الرسالة'
+        });
+    }
+});
+
 module.exports = router; 
