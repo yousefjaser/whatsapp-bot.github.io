@@ -499,9 +499,6 @@
         // إضافة جهاز جديد
         async function addNewDevice() {
             try {
-                const modal = new bootstrap.Modal(document.getElementById('deviceModal'));
-                modal.show();
-                
                 showLoading('جاري إضافة جهاز جديد...');
                 
                 const response = await fetch('/api/devices/add', {
@@ -520,6 +517,7 @@
                     currentDeviceId = data.deviceId;
                     hideLoading();
                     document.getElementById('qrContainer').style.display = 'block';
+                    showMessage('success', 'تم إنشاء الجهاز بنجاح. في انتظار مسح رمز QR...');
                     startQRCheck(currentDeviceId);
                     startStatusCheck(currentDeviceId);
                 } else {
@@ -527,19 +525,52 @@
                 }
             } catch (error) {
                 console.error('خطأ:', error);
+                hideLoading();
                 showError(error.message || 'حدث خطأ في إضافة الجهاز');
+                // إعادة تعيين الحالة
+                clearIntervals();
+                document.getElementById('qrContainer').style.display = 'none';
             }
         }
 
-        function clearIntervals() {
-            if (qrCheckInterval) {
-                clearInterval(qrCheckInterval);
-                qrCheckInterval = null;
-            }
-            if (statusCheckInterval) {
-                clearInterval(statusCheckInterval);
-                statusCheckInterval = null;
-            }
+        function showMessage(type, message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('qrContainer').insertAdjacentElement('beforebegin', alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+
+        function showLoading(message) {
+            document.getElementById('qrContainer').innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary mb-3"></div>
+                    <p class="mb-0">${message}</p>
+                    <small class="text-muted">قد تستغرق العملية بضع دقائق...</small>
+                </div>
+            `;
+            document.getElementById('qrContainer').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('qrContainer').innerHTML = '';
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger';
+            errorDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                ${message}
+            `;
+            document.getElementById('qrContainer').innerHTML = '';
+            document.getElementById('qrContainer').appendChild(errorDiv);
         }
 
         async function startQRCheck(deviceId) {
@@ -559,6 +590,7 @@
                                 <img src="${data.qrCode}" alt="رمز QR" class="img-fluid">
                             </div>
                             <p class="text-center mt-3">امسح رمز QR باستخدام تطبيق واتساب على هاتفك</p>
+                            <p class="text-center text-muted small">سيتم تحديث الرمز تلقائياً كل دقيقتين</p>
                         `;
                     }
                 } catch (error) {
@@ -566,7 +598,7 @@
                     clearInterval(qrCheckInterval);
                     showError('فشل في جلب رمز QR');
                 }
-            }, 2000);
+            }, 5000); // التحقق كل 5 ثواني
         }
 
         async function startStatusCheck(deviceId) {
@@ -611,24 +643,6 @@
                     showError('فشل في التحقق من حالة الجهاز');
                 }
             }, 2000);
-        }
-
-        function showLoading(message) {
-            document.getElementById('qrContainer').innerHTML = `
-                <div class="text-center">
-                    <div class="spinner-border text-primary mb-3"></div>
-                    <p>${message}</p>
-                </div>
-            `;
-        }
-
-        function showError(message) {
-            document.getElementById('qrContainer').innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    ${message}
-                </div>
-            `;
         }
 
         function showSuccess(message) {

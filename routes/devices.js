@@ -70,23 +70,29 @@ router.post('/add', validateSession, async (req, res) => {
             }
         });
 
-        // إنشاء عميل WhatsApp جديد
+        // إعدادات Puppeteer المحسنة
         const client = new Client({
             puppeteer: {
-                headless: true,
+                headless: 'new',
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
-                    '--disable-accelerated-2d-canvas',
-                    '--no-first-run',
-                    '--no-zygote',
-                    '--disable-gpu'
+                    '--disable-gpu',
+                    '--disable-extensions',
+                    '--window-size=1280,720',
+                    '--disable-web-security',
+                    '--allow-running-insecure-content'
                 ],
-                executablePath: process.env.CHROME_BIN || null
+                defaultViewport: {
+                    width: 1280,
+                    height: 720
+                },
+                timeout: 120000,
+                executablePath: process.env.CHROME_BIN || undefined
             },
-            qrMaxRetries: 5,
-            authTimeoutMs: 60000,
+            qrMaxRetries: 10,
+            authTimeoutMs: 120000,
             restartOnAuthFail: true
         });
 
@@ -203,17 +209,21 @@ router.post('/add', validateSession, async (req, res) => {
         try {
             console.log('بدء تهيئة العميل للجهاز:', deviceRef.id);
             await client.initialize();
+            
+            res.json({
+                success: true,
+                deviceId: deviceRef.id,
+                message: 'تم إضافة الجهاز بنجاح'
+            });
         } catch (error) {
             console.error('خطأ في تهيئة العميل:', error);
             await handleDeviceError(deviceRef, error);
-            throw error;
+            
+            res.status(500).json({
+                success: false,
+                error: 'حدث خطأ في تهيئة الجهاز'
+            });
         }
-
-        res.json({
-            success: true,
-            deviceId: deviceRef.id,
-            message: 'تم إضافة الجهاز بنجاح'
-        });
 
     } catch (error) {
         console.error('خطأ في إضافة جهاز:', error);
