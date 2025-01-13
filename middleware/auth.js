@@ -1,29 +1,44 @@
 const firebase = require('../utils/firebase');
 const logger = require('../utils/logger');
 
+// المسارات العامة التي لا تحتاج إلى مصادقة
+const publicPaths = [
+    '/login.html',
+    '/register.html',
+    '/api-dashboard.html',
+    '/docs.html',
+    '/api-docs.html',
+    '/css/',
+    '/js/',
+    '/images/',
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/status',
+    '/api/v1/send'
+];
+
 /**
  * التحقق من صلاحية الجلسة
  */
 async function validateSession(req, res, next) {
     try {
-        logger.info('بدء التحقق من الجلسة', {
-            path: req.path,
-            method: req.method,
-            sessionId: req.sessionID,
-            userId: req.session?.userId
-        });
+        // التحقق من المسارات العامة
+        if (publicPaths.some(path => req.path.startsWith(path))) {
+            logger.info('مسار عام - لا يحتاج إلى مصادقة', {
+                path: req.path,
+                method: req.method
+            });
+            return next();
+        }
 
         // التحقق من وجود جلسة
         if (!req.session) {
             logger.error('لا توجد جلسة', {
                 path: req.path,
                 method: req.method,
-                sessionId: req.sessionID
+                headers: req.headers
             });
-            return res.status(401).json({
-                success: false,
-                message: 'يجب تسجيل الدخول أولاً'
-            });
+            return handleAuthError(req, res, 'يجب تسجيل الدخول أولاً');
         }
 
         // التحقق من وجود معرف المستخدم
@@ -31,12 +46,9 @@ async function validateSession(req, res, next) {
             logger.error('لا يوجد معرف للمستخدم في الجلسة', {
                 path: req.path,
                 method: req.method,
-                sessionId: req.sessionID
+                session: req.session
             });
-            return res.status(401).json({
-                success: false,
-                message: 'يجب تسجيل الدخول أولاً'
-            });
+            return handleAuthError(req, res, 'يجب تسجيل الدخول أولاً');
         }
 
         // التحقق من وجود المستخدم في قاعدة البيانات
@@ -45,14 +57,11 @@ async function validateSession(req, res, next) {
             logger.error('المستخدم غير موجود في قاعدة البيانات', {
                 path: req.path,
                 method: req.method,
-                sessionId: req.sessionID,
-                userId: req.session.userId
+                userId: req.session.userId,
+                session: req.session
             });
-            req.session.destroy();
-            return res.status(401).json({
-                success: false,
-                message: 'يجب تسجيل الدخول أولاً'
-            });
+            await destroySession(req);
+            return handleAuthError(req, res, 'يجب تسجيل الدخول أولاً');
         }
 
         // تخزين معلومات المستخدم في الطلب
@@ -60,7 +69,6 @@ async function validateSession(req, res, next) {
         logger.info('تم التحقق من الجلسة بنجاح', {
             path: req.path,
             method: req.method,
-            sessionId: req.sessionID,
             userId: user.id
         });
         next();
@@ -68,70 +76,54 @@ async function validateSession(req, res, next) {
         logger.error('خطأ في التحقق من الجلسة', {
             path: req.path,
             method: req.method,
-            sessionId: req.sessionID,
-            userId: req.session?.userId,
             error: {
                 message: error.message,
                 stack: error.stack,
                 name: error.name
-            }
+            },
+            session: req.session,
+            headers: req.headers
         });
-        return res.status(500).json({
-            success: false,
-            message: 'حدث خطأ في التحقق من الجلسة'
-        });
+        return handleAuthError(req, res, 'حدث خطأ في التحقق من الجلسة');
     }
 }
 
 /**
- * التحقق من صلاحيات المشرف
+ * معالجة أخطاء المصادقة
  */
-async function validateAdmin(req, res, next) {
-    try {
-        logger.info('بدء التحقق من صلاحيات المشرف', {
-            path: req.path,
-            method: req.method,
-            userId: req.user?.id
-        });
-
-        // التحقق من وجود جلسة وصلاحيات المشرف
-        if (!req.user || !req.user.isAdmin) {
-            logger.error('محاولة وصول غير مصرح بها للوحة المشرف', {
-                path: req.path,
-                method: req.method,
-                userId: req.user?.id
-            });
-            return res.status(403).json({
-                success: false,
-                error: 'غير مصرح بالوصول'
-            });
-        }
-
-        // تسجيل وصول المشرف
-        logger.info('وصول مشرف ناجح', {
-            path: req.path,
-            method: req.method,
-            userId: req.user.id
-        });
-
-        next();
-
-    } catch (error) {
-        logger.error('خطأ في التحقق من صلاحيات المشرف', {
-            path: req.path,
-            method: req.method,
-            userId: req.user?.id,
-            error: {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
-            }
-        });
-        return res.status(500).json({
+function handleAuthError(req, res, message) {
+    const isApiRequest = req.xhr || req.path.startsWith('/api/');
+    
+    if (isApiRequest) {
+        return res.status(401).json({
             success: false,
-            error: 'حدث خطأ في التحقق من الصلاحيات'
+            error: message
         });
     }
+
+    const returnTo = encodeURIComponent(req.originalUrl);
+    return res.redirect(`/login.html?redirect=${returnTo}`);
+}
+
+/**
+ * إنهاء الجلسة
+ */
+async function destroySession(req) {
+    return new Promise((resolve) => {
+        if (req.session) {
+            req.session.destroy((err) => {
+                if (err) {
+                    logger.error('خطأ في إنهاء الجلسة', {
+                        error: err.message,
+                        session: req.session
+                    });
+                }
+                resolve();
+            });
+        } else {
+            resolve();
+        }
+    });
 }
 
 /**
@@ -140,21 +132,15 @@ async function validateAdmin(req, res, next) {
 async function validateDeviceOwnership(req, res, next) {
     try {
         const { deviceId } = req.params;
-        const userId = req.session?.userId;
-
-        logger.info('بدء التحقق من ملكية الجهاز', {
-            path: req.path,
-            method: req.method,
-            deviceId,
-            userId
-        });
+        const userId = req.user?.id;
 
         if (!deviceId || !userId) {
             logger.error('بيانات غير مكتملة للتحقق من ملكية الجهاز', {
                 path: req.path,
                 method: req.method,
                 deviceId,
-                userId
+                userId,
+                user: req.user
             });
             return res.status(401).json({
                 success: false,
@@ -169,7 +155,8 @@ async function validateDeviceOwnership(req, res, next) {
                 method: req.method,
                 deviceId,
                 userId,
-                deviceOwnerId: device?.userId
+                deviceOwnerId: device?.userId,
+                device: device
             });
             return res.status(403).json({
                 success: false,
@@ -177,6 +164,8 @@ async function validateDeviceOwnership(req, res, next) {
             });
         }
 
+        // تخزين معلومات الجهاز في الطلب
+        req.device = device;
         logger.info('تم التحقق من ملكية الجهاز بنجاح', {
             path: req.path,
             method: req.method,
@@ -190,7 +179,7 @@ async function validateDeviceOwnership(req, res, next) {
             path: req.path,
             method: req.method,
             deviceId: req.params.deviceId,
-            userId: req.session?.userId,
+            userId: req.user?.id,
             error: {
                 message: error.message,
                 stack: error.stack,
@@ -204,41 +193,7 @@ async function validateDeviceOwnership(req, res, next) {
     }
 }
 
-/**
- * معالجة أخطاء المصادقة
- */
-function handleAuthError(req, res, message) {
-    // التحقق من نوع الطلب
-    const isApiRequest = req.xhr || req.path.startsWith('/api/');
-    
-    if (isApiRequest) {
-        return res.status(401).json({
-            success: false,
-            error: message
-        });
-    }
-
-    // حفظ المسار الحالي للعودة إليه بعد تسجيل الدخول
-    const returnTo = encodeURIComponent(req.originalUrl);
-    return res.redirect(`/login.html?redirect=${returnTo}`);
-}
-
-/**
- * إنهاء الجلسة
- */
-async function destroySession(req) {
-    return new Promise((resolve) => {
-        req.session.destroy((err) => {
-            if (err) {
-                logger.error('خطأ في إنهاء الجلسة:', err);
-            }
-            resolve();
-        });
-    });
-}
-
 module.exports = {
     validateSession,
-    validateAdmin,
     validateDeviceOwnership
 }; 
