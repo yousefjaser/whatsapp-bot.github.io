@@ -21,9 +21,19 @@ const publicPaths = [
  * التحقق من صلاحية الجلسة
  */
 async function validateSession(req, res, next) {
+    // تسجيل معلومات الطلب
+    logger.info('بداية التحقق من الجلسة', {
+        path: req.path,
+        method: req.method,
+        sessionId: req.sessionID,
+        session: req.session,
+        headers: req.headers,
+        cookies: req.cookies
+    });
+
     try {
         // التحقق من المسارات العامة
-        if (publicPaths.some(path => req.path.startsWith(path))) {
+        if (publicPaths.some(path => req.path.toLowerCase().startsWith(path.toLowerCase()))) {
             logger.info('مسار عام - لا يحتاج إلى مصادقة', {
                 path: req.path,
                 method: req.method
@@ -36,29 +46,37 @@ async function validateSession(req, res, next) {
             logger.error('لا توجد جلسة', {
                 path: req.path,
                 method: req.method,
-                headers: req.headers
+                headers: req.headers,
+                cookies: req.cookies
             });
             return handleAuthError(req, res, 'يجب تسجيل الدخول أولاً');
         }
 
+        // تسجيل محتويات الجلسة
+        logger.info('محتويات الجلسة', {
+            sessionId: req.sessionID,
+            session: req.session
+        });
+
         // التحقق من وجود معرف المستخدم
-        if (!req.session.userId) {
+        const userId = req.session.userId;
+        if (!userId) {
             logger.error('لا يوجد معرف للمستخدم في الجلسة', {
                 path: req.path,
                 method: req.method,
                 session: req.session
             });
+            await destroySession(req);
             return handleAuthError(req, res, 'يجب تسجيل الدخول أولاً');
         }
 
         // التحقق من وجود المستخدم في قاعدة البيانات
-        const user = await firebase.getUser(req.session.userId);
+        const user = await firebase.getUser(userId);
         if (!user) {
             logger.error('المستخدم غير موجود في قاعدة البيانات', {
                 path: req.path,
                 method: req.method,
-                userId: req.session.userId,
-                session: req.session
+                userId: userId
             });
             await destroySession(req);
             return handleAuthError(req, res, 'يجب تسجيل الدخول أولاً');
@@ -66,11 +84,15 @@ async function validateSession(req, res, next) {
 
         // تخزين معلومات المستخدم في الطلب
         req.user = user;
+        req.user.id = userId; // التأكد من تخزين معرف المستخدم
+
         logger.info('تم التحقق من الجلسة بنجاح', {
             path: req.path,
             method: req.method,
-            userId: user.id
+            userId: userId,
+            user: user
         });
+
         next();
     } catch (error) {
         logger.error('خطأ في التحقق من الجلسة', {
@@ -134,6 +156,14 @@ async function validateDeviceOwnership(req, res, next) {
         const { deviceId } = req.params;
         const userId = req.user?.id;
 
+        logger.info('بداية التحقق من ملكية الجهاز', {
+            path: req.path,
+            method: req.method,
+            deviceId,
+            userId,
+            user: req.user
+        });
+
         if (!deviceId || !userId) {
             logger.error('بيانات غير مكتملة للتحقق من ملكية الجهاز', {
                 path: req.path,
@@ -149,6 +179,12 @@ async function validateDeviceOwnership(req, res, next) {
         }
 
         const device = await firebase.getDevice(deviceId);
+        logger.info('معلومات الجهاز', {
+            deviceId,
+            device,
+            userId
+        });
+
         if (!device || device.userId !== userId) {
             logger.error('محاولة وصول غير مصرح بها للجهاز', {
                 path: req.path,
