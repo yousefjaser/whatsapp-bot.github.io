@@ -1,0 +1,250 @@
+/* الألوان الأساسية */
+:root {
+    --primary-color: #128C7E;
+    --secondary-color: #075E54;
+    --success-color: #25D366;
+    --bg-color: #f0f2f5;
+    --text-color: #333;
+    --card-bg: #fff;
+    --border-color: #ddd;
+    --input-bg: #fff;
+    --input-color: #333;
+}
+
+/* الوضع المظلم */
+[data-theme="dark"] {
+    --bg-color: #111b21;
+    --text-color: #e9edef;
+    --card-bg: #1f2c33;
+    --border-color: #374045;
+    --input-bg: #2a3942;
+    --input-color: #e9edef;
+}
+
+/* الأنماط الأساسية */
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* البطاقات */
+.card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.card h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--primary-color);
+}
+
+/* النماذج */
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-color);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+select,
+textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--input-bg);
+    color: var(--input-color);
+    font-size: 16px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(18, 140, 126, 0.2);
+}
+
+textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* الأزرار */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--secondary-color);
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+/* بطاقات الأجهزة */
+.device-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    background-color: var(--card-bg);
+}
+
+.device-card h3 {
+    margin: 0 0 10px 0;
+    color: var(--primary-color);
+}
+
+.device-card p {
+    margin: 5px 0;
+}
+
+.device-card button {
+    margin-right: 10px;
+}
+
+/* حالات الأجهزة */
+.status-connected {
+    color: var(--success-color);
+}
+
+.status-disconnected {
+    color: #dc3545;
+}
+
+.status-initializing,
+.status-qr_ready,
+.status-authenticated {
+    color: #ffc107;
+}
+
+/* النافذة المنبثقة */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 500px;
+    position: relative;
+}
+
+.close {
+    position: absolute;
+    right: 20px;
+    top: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--text-color);
+}
+
+.close:hover {
+    color: var(--primary-color);
+}
+
+/* رمز QR */
+#qrCode {
+    text-align: center;
+    margin: 20px 0;
+}
+
+#qrCode img {
+    max-width: 300px;
+    border: 8px solid white;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+#qrStatus {
+    text-align: center;
+    margin: 10px 0;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+#qrInstructions {
+    margin: 20px 0;
+    padding: 15px;
+    background-color: rgba(18, 140, 126, 0.1);
+    border-radius: 8px;
+}
+
+#qrInstructions ol {
+    margin: 0;
+    padding-right: 20px;
+}
+
+#qrInstructions li {
+    margin-bottom: 8px;
+}
+
+/* التوافقية */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 10px;
+    }
+    
+    .modal-content {
+        margin: 5% 10px;
+    }
+    
+    .btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    .device-card button {
+        margin-right: 0;
+        margin-bottom: 5px;
+    }
+} 

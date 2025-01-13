@@ -1,194 +1,135 @@
 const express = require('express');
 const router = express.Router();
-const admin = require('firebase-admin');
-const { validateSession } = require('../middleware/auth');
+const { clientSessions } = require('./whatsapp');
+const firebase = require('../utils/firebase');
+const logger = require('../utils/logger');
+const validation = require('../utils/validation');
 
-/**
- * إرسال رسالة WhatsApp
- */
-router.post('/send', async (req, res) => {
-    console.log('محاولة إرسال رسالة WhatsApp جديدة');
-    
+// إرسال رسالة
+router.post('/v1/send', async (req, res) => {
     try {
-        const { to, message, type = 'text' } = req.body;
+        const { deviceId, to, message } = req.body;
+        const userId = req.session.userId;
 
         // التحقق من البيانات المطلوبة
-        if (!to || !message) {
-            return res.status(400).json({
+        if (!deviceId || !to || !message) {
+            return res.json({
                 success: false,
-                error: 'رقم الهاتف والرسالة مطلوبان'
+                error: 'جميع الحقول مطلوبة: deviceId, to, message'
             });
         }
 
-        // التحقق من صحة رقم الهاتف
-        const phoneNumber = normalizePhoneNumber(to);
-        if (!isValidPhoneNumber(phoneNumber)) {
-            return res.status(400).json({
+        // التحقق من وجود الجهاز
+        const device = await firebase.getDevice(deviceId);
+        if (!device) {
+            return res.json({
+                success: false,
+                error: 'الجهاز غير موجود'
+            });
+        }
+
+        // التحقق من ملكية الجهاز
+        if (device.userId !== userId) {
+            return res.json({
+                success: false,
+                error: 'غير مصرح بالوصول لهذا الجهاز'
+            });
+        }
+
+        // التحقق من حالة الجهاز
+        const session = clientSessions.get(deviceId);
+        if (!session || session.status !== 'connected') {
+            return res.json({
+                success: false,
+                error: 'الجهاز غير متصل'
+            });
+        }
+
+        // تنظيف وتحقق من رقم الهاتف
+        const cleanPhone = validation.cleanPhoneNumber(to);
+        if (!validation.isValidPhone(cleanPhone)) {
+            return res.json({
                 success: false,
                 error: 'رقم الهاتف غير صالح'
             });
         }
 
-        // التحقق من نوع الرسالة
-        if (!isValidMessageType(type)) {
-            return res.status(400).json({
-                success: false,
-                error: 'نوع الرسالة غير صالح'
-            });
-        }
-
         // إرسال الرسالة
-        const messageId = await sendWhatsAppMessage(phoneNumber, message, type);
+        const chatId = cleanPhone + '@c.us';
+        await session.client.sendMessage(chatId, message);
 
         // حفظ سجل الرسالة
-        await saveMessageLog({
-            to: phoneNumber,
+        await firebase.saveMessage({
+            userId,
+            deviceId,
+            to: cleanPhone,
             message,
-            type,
-            messageId,
-            userId: req.session?.userId
+            type: 'text',
+            status: 'sent',
+            createdAt: new Date()
         });
+
+        // تسجيل نجاح العملية
+        logger.info(`تم إرسال رسالة بنجاح من الجهاز ${deviceId} إلى ${cleanPhone}`);
 
         return res.json({
             success: true,
-            messageId,
             message: 'تم إرسال الرسالة بنجاح'
         });
 
     } catch (error) {
-        console.error('خطأ في إرسال الرسالة:', error);
-        return res.status(500).json({
+        logger.error('خطأ في إرسال الرسالة:', error);
+        return res.json({
             success: false,
             error: 'حدث خطأ في إرسال الرسالة'
         });
     }
 });
 
-/**
- * الحصول على سجل الرسائل
- */
-router.get('/messages', validateSession, async (req, res) => {
-    console.log('جلب سجل الرسائل للمستخدم:', req.user.id);
-    
+// الحصول على سجل الرسائل
+router.get('/v1/messages', async (req, res) => {
     try {
-        const { limit = 50, page = 1 } = req.query;
-        const skip = (page - 1) * limit;
+        const userId = req.session.userId;
+        const { deviceId, limit = 10, offset = 0 } = req.query;
+
+        // التحقق من وجود الجهاز إذا تم تحديده
+        if (deviceId) {
+            const device = await firebase.getDevice(deviceId);
+            if (!device) {
+                return res.json({
+                    success: false,
+                    error: 'الجهاز غير موجود'
+                });
+            }
+
+            // التحقق من ملكية الجهاز
+            if (device.userId !== userId) {
+                return res.json({
+                    success: false,
+                    error: 'غير مصرح بالوصول لهذا الجهاز'
+                });
+            }
+        }
 
         // جلب الرسائل
-        const messages = await getMessages(req.user.id, parseInt(limit), skip);
-        const total = await getMessagesCount(req.user.id);
+        const messages = await firebase.getUserMessages(userId, {
+            deviceId,
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+        });
 
         return res.json({
             success: true,
-            messages,
-            pagination: {
-                total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                pages: Math.ceil(total / limit)
-            }
+            messages
         });
 
     } catch (error) {
-        console.error('خطأ في جلب سجل الرسائل:', error);
-        return res.status(500).json({
+        logger.error('خطأ في جلب سجل الرسائل:', error);
+        return res.json({
             success: false,
             error: 'حدث خطأ في جلب سجل الرسائل'
         });
     }
 });
-
-/**
- * تنسيق رقم الهاتف
- */
-function normalizePhoneNumber(phone) {
-    // إزالة كل الأحرف غير الرقمية
-    let normalized = phone.replace(/\D/g, '');
-    
-    // إضافة رمز الدولة إذا لم يكن موجوداً
-    if (!normalized.startsWith('962')) {
-        normalized = '962' + (normalized.startsWith('0') ? normalized.slice(1) : normalized);
-    }
-    
-    return normalized;
-}
-
-/**
- * التحقق من صحة رقم الهاتف
- */
-function isValidPhoneNumber(phone) {
-    // التحقق من أن الرقم يبدأ بـ 962 ويتكون من 12 رقم
-    return /^962\d{9}$/.test(phone);
-}
-
-/**
- * التحقق من نوع الرسالة
- */
-function isValidMessageType(type) {
-    return ['text', 'image', 'document', 'video', 'audio'].includes(type);
-}
-
-/**
- * إرسال رسالة WhatsApp
- */
-async function sendWhatsAppMessage(to, message, type) {
-    try {
-        // هنا يتم إضافة كود إرسال الرسالة عبر WhatsApp API
-        const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        return messageId;
-    } catch (error) {
-        console.error('خطأ في إرسال رسالة WhatsApp:', error);
-        throw new Error('فشل في إرسال الرسالة');
-    }
-}
-
-/**
- * حفظ سجل الرسالة
- */
-async function saveMessageLog(messageData) {
-    try {
-        await admin.firestore()
-            .collection('messages')
-            .add({
-                ...messageData,
-                status: 'sent',
-                createdAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-    } catch (error) {
-        console.error('خطأ في حفظ سجل الرسالة:', error);
-    }
-}
-
-/**
- * جلب الرسائل
- */
-async function getMessages(userId, limit, skip) {
-    const snapshot = await admin.firestore()
-        .collection('messages')
-        .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
-        .limit(limit)
-        .offset(skip)
-        .get();
-
-    return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate()
-    }));
-}
-
-/**
- * جلب عدد الرسائل
- */
-async function getMessagesCount(userId) {
-    const snapshot = await admin.firestore()
-        .collection('messages')
-        .where('userId', '==', userId)
-        .count()
-        .get();
-
-    return snapshot.data().count;
-}
 
 module.exports = router; 

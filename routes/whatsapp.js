@@ -8,288 +8,241 @@ const firebase = require('../utils/firebase');
 // تخزين جلسات WhatsApp
 const clientSessions = new Map();
 
-/**
- * الحصول على حالة الاتصال
- */
+// الحصول على حالة الاتصال
 router.get('/status/:deviceId', async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const client = clientSessions.get(deviceId);
+        const userId = req.session.userId;
 
-        // تسجيل محاولة الوصول
-        await logger.device('محاولة التحقق من حالة الجهاز', {
-            deviceId,
-            userId: req.user.id
-        });
+        // التحقق من وجود الجهاز
+        const device = await firebase.getDevice(deviceId);
+        if (!device) {
+            return res.json({ success: false, error: 'الجهاز غير موجود' });
+        }
 
-        if (!client) {
-            return res.json({
+        // التحقق من ملكية الجهاز
+        if (device.userId !== userId) {
+            return res.json({ success: false, error: 'غير مصرح بالوصول لهذا الجهاز' });
+        }
+
+        // الحصول على حالة الجلسة
+        const session = clientSessions.get(deviceId);
+        if (!session) {
+            return res.json({ 
+                success: true, 
                 status: 'disconnected',
                 message: 'الجهاز غير متصل'
             });
         }
 
+        // إرجاع الحالة مع رمز QR إذا كان متوفراً
         return res.json({
-            status: client.status || 'disconnected',
-            message: client.statusMessage || 'الجهاز غير متصل'
+            success: true,
+            status: session.status,
+            message: session.message,
+            qr: session.qr
         });
 
     } catch (error) {
-        console.error('خطأ في التحقق من حالة الجهاز:', error);
-        await logger.error('خطأ في التحقق من حالة الجهاز', {
-            error: error.message,
-            deviceId: req.params.deviceId
-        });
-        res.status(500).json({
-            error: 'حدث خطأ أثناء التحقق من حالة الجهاز'
-        });
+        logger.error('خطأ في الحصول على حالة الجهاز:', error);
+        return res.json({ success: false, error: 'حدث خطأ في الحصول على حالة الجهاز' });
     }
 });
 
-/**
- * بدء جلسة جديدة
- */
+// بدء جلسة جديدة
 router.post('/session/start/:deviceId', async (req, res) => {
     try {
         const { deviceId } = req.params;
-        
-        // التحقق من عدم وجود جلسة نشطة
-        if (clientSessions.has(deviceId)) {
-            const existingClient = clientSessions.get(deviceId);
-            if (existingClient.status === 'connected') {
-                return res.status(400).json({
-                    error: 'الجهاز متصل بالفعل'
-                });
-            }
-            // إنهاء الجلسة القديمة
-            await existingClient.destroy();
+        const userId = req.session.userId;
+
+        // التحقق من وجود الجهاز
+        const device = await firebase.getDevice(deviceId);
+        if (!device) {
+            return res.json({ success: false, error: 'الجهاز غير موجود' });
+        }
+
+        // التحقق من ملكية الجهاز
+        if (device.userId !== userId) {
+            return res.json({ success: false, error: 'غير مصرح بالوصول لهذا الجهاز' });
+        }
+
+        // إنهاء الجلسة القديمة إذا وجدت
+        const existingSession = clientSessions.get(deviceId);
+        if (existingSession) {
+            logger.info(`إنهاء الجلسة القديمة للجهاز ${deviceId}`);
+            await existingSession.client.destroy();
             clientSessions.delete(deviceId);
         }
 
         // إنشاء عميل جديد
         const client = new Client({
             puppeteer: {
-                args: ['--no-sandbox']
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--disable-gpu'
+                ]
             }
         });
 
-        // تخزين العميل
-        clientSessions.set(deviceId, client);
-        client.status = 'initializing';
-        client.statusMessage = 'جاري تهيئة الجلسة...';
-        client.qr = null;
+        // تهيئة الجلسة
+        const session = {
+            client,
+            status: 'initializing',
+            message: 'جاري تهيئة الجلسة...',
+            qr: null
+        };
 
-        // معالجة الأحداث
-        client.on('qr', async (qr) => {
-            try {
-                client.qr = await qrcode.toDataURL(qr);
-                client.status = 'qr_ready';
-                client.statusMessage = 'جاري انتظار مسح رمز QR...';
-                
-                await logger.device('تم إنشاء رمز QR جديد', {
-                    deviceId,
-                    userId: req.user.id
-                });
-            } catch (error) {
-                console.error('خطأ في إنشاء رمز QR:', error);
-                await logger.error('خطأ في إنشاء رمز QR', {
-                    error: error.message,
-                    deviceId
-                });
-            }
-        });
+        // إعداد معالجات الأحداث
+        setupClientEvents(client, deviceId, userId, session);
 
-        client.on('ready', async () => {
-            try {
-                client.status = 'connected';
-                client.statusMessage = 'متصل';
-                client.qr = null;
-
-                // تحديث حالة الجهاز في قاعدة البيانات
-                await firebase.updateDeviceStatus(deviceId, 'connected');
-                
-                await logger.device('تم الاتصال بنجاح', {
-                    deviceId,
-                    userId: req.user.id
-                });
-            } catch (error) {
-                console.error('خطأ في معالجة حدث ready:', error);
-                await logger.error('خطأ في معالجة حدث ready', {
-                    error: error.message,
-                    deviceId
-                });
-            }
-        });
-
-        client.on('authenticated', async () => {
-            try {
-                client.status = 'authenticated';
-                client.statusMessage = 'تم المصادقة';
-                
-                await logger.device('تم المصادقة بنجاح', {
-                    deviceId,
-                    userId: req.user.id
-                });
-            } catch (error) {
-                console.error('خطأ في معالجة حدث authenticated:', error);
-                await logger.error('خطأ في معالجة حدث authenticated', {
-                    error: error.message,
-                    deviceId
-                });
-            }
-        });
-
-        client.on('auth_failure', async (error) => {
-            try {
-                client.status = 'auth_failed';
-                client.statusMessage = 'فشل المصادقة';
-                
-                await logger.error('فشل المصادقة', {
-                    error: error.message,
-                    deviceId,
-                    userId: req.user.id
-                });
-
-                // تحديث حالة الجهاز في قاعدة البيانات
-                await firebase.updateDeviceStatus(deviceId, 'disconnected');
-            } catch (error) {
-                console.error('خطأ في معالجة حدث auth_failure:', error);
-                await logger.error('خطأ في معالجة حدث auth_failure', {
-                    error: error.message,
-                    deviceId
-                });
-            }
-        });
-
-        client.on('disconnected', async () => {
-            try {
-                client.status = 'disconnected';
-                client.statusMessage = 'تم قطع الاتصال';
-                client.qr = null;
-
-                // تحديث حالة الجهاز في قاعدة البيانات
-                await firebase.updateDeviceStatus(deviceId, 'disconnected');
-                
-                await logger.device('تم قطع الاتصال', {
-                    deviceId,
-                    userId: req.user.id
-                });
-
-                // إزالة العميل من الذاكرة
-                clientSessions.delete(deviceId);
-            } catch (error) {
-                console.error('خطأ في معالجة حدث disconnected:', error);
-                await logger.error('خطأ في معالجة حدث disconnected', {
-                    error: error.message,
-                    deviceId
-                });
-            }
-        });
+        // حفظ الجلسة
+        clientSessions.set(deviceId, session);
 
         // بدء تشغيل العميل
         await client.initialize();
 
-        res.json({
-            status: 'initializing',
-            message: 'جاري تهيئة الجلسة...'
-        });
+        return res.json({ success: true });
 
     } catch (error) {
-        console.error('خطأ في بدء الجلسة:', error);
-        await logger.error('خطأ في بدء الجلسة', {
-            error: error.message,
-            deviceId: req.params.deviceId
-        });
-        res.status(500).json({
-            error: 'حدث خطأ أثناء بدء الجلسة'
-        });
+        logger.error('خطأ في بدء الجلسة:', error);
+        return res.json({ success: false, error: 'حدث خطأ في بدء الجلسة' });
     }
 });
 
-/**
- * الحصول على رمز QR
- */
-router.get('/qr/:deviceId', async (req, res) => {
-    try {
-        const { deviceId } = req.params;
-        const client = clientSessions.get(deviceId);
-
-        // تسجيل محاولة الوصول
-        await logger.device('محاولة الحصول على رمز QR', {
-            deviceId,
-            userId: req.user.id
-        });
-
-        if (!client) {
-            return res.status(404).json({
-                error: 'الجهاز غير موجود'
-            });
-        }
-
-        if (!client.qr) {
-            return res.status(404).json({
-                error: 'رمز QR غير متوفر حالياً'
-            });
-        }
-
-        res.json({
-            qr: client.qr
-        });
-
-    } catch (error) {
-        console.error('خطأ في جلب رمز QR:', error);
-        await logger.error('خطأ في جلب رمز QR', {
-            error: error.message,
-            deviceId: req.params.deviceId
-        });
-        res.status(500).json({
-            error: 'حدث خطأ أثناء جلب رمز QR'
-        });
-    }
-});
-
-/**
- * إنهاء الجلسة
- */
+// إنهاء الجلسة
 router.post('/session/end/:deviceId', async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const client = clientSessions.get(deviceId);
+        const userId = req.session.userId;
 
-        if (!client) {
-            return res.status(404).json({
-                error: 'الجهاز غير موجود'
-            });
+        // التحقق من وجود الجهاز
+        const device = await firebase.getDevice(deviceId);
+        if (!device) {
+            return res.json({ success: false, error: 'الجهاز غير موجود' });
         }
 
-        // تسجيل الحدث
-        await logger.device('جاري إنهاء الجلسة', {
-            deviceId,
-            userId: req.user.id
-        });
+        // التحقق من ملكية الجهاز
+        if (device.userId !== userId) {
+            return res.json({ success: false, error: 'غير مصرح بالوصول لهذا الجهاز' });
+        }
 
-        // إنهاء الجلسة
-        await client.destroy();
-        clientSessions.delete(deviceId);
+        // إنهاء الجلسة إذا وجدت
+        const session = clientSessions.get(deviceId);
+        if (session) {
+            await session.client.destroy();
+            clientSessions.delete(deviceId);
+            
+            // تحديث حالة الجهاز في قاعدة البيانات
+            await firebase.updateDeviceStatus(deviceId, 'disconnected');
+            
+            logger.info(`تم إنهاء الجلسة للجهاز ${deviceId}`);
+        }
 
-        // تحديث حالة الجهاز في قاعدة البيانات
-        await firebase.updateDeviceStatus(deviceId, 'disconnected');
-
-        res.json({
-            status: 'success',
-            message: 'تم إنهاء الجلسة بنجاح'
-        });
+        return res.json({ success: true });
 
     } catch (error) {
-        console.error('خطأ في إنهاء الجلسة:', error);
-        await logger.error('خطأ في إنهاء الجلسة', {
-            error: error.message,
-            deviceId: req.params.deviceId
-        });
-        res.status(500).json({
-            error: 'حدث خطأ أثناء إنهاء الجلسة'
-        });
+        logger.error('خطأ في إنهاء الجلسة:', error);
+        return res.json({ success: false, error: 'حدث خطأ في إنهاء الجلسة' });
     }
 });
+
+// إعداد معالجات الأحداث للعميل
+function setupClientEvents(client, deviceId, userId, session) {
+    // عند إنشاء رمز QR
+    client.on('qr', async (qr) => {
+        try {
+            // تحويل رمز QR إلى صورة
+            const qrImage = await qrcode.toDataURL(qr);
+            
+            // تحديث حالة الجلسة
+            session.status = 'qr_ready';
+            session.message = 'جاري انتظار مسح رمز QR...';
+            session.qr = qrImage;
+
+            // تحديث حالة الجهاز في قاعدة البيانات
+            await firebase.updateDeviceStatus(deviceId, 'qr_ready');
+            
+            logger.info(`تم إنشاء رمز QR جديد للجهاز ${deviceId}`);
+        } catch (error) {
+            logger.error('خطأ في معالجة رمز QR:', error);
+        }
+    });
+
+    // عند جاهزية العميل
+    client.on('ready', async () => {
+        try {
+            // تحديث حالة الجلسة
+            session.status = 'connected';
+            session.message = 'تم الاتصال بنجاح';
+            session.qr = null;
+
+            // تحديث حالة الجهاز في قاعدة البيانات
+            await firebase.updateDeviceStatus(deviceId, 'connected');
+            
+            logger.info(`تم اتصال الجهاز ${deviceId} بنجاح`);
+        } catch (error) {
+            logger.error('خطأ في معالجة حدث الجاهزية:', error);
+        }
+    });
+
+    // عند نجاح المصادقة
+    client.on('authenticated', async () => {
+        try {
+            // تحديث حالة الجلسة
+            session.status = 'authenticated';
+            session.message = 'تم المصادقة بنجاح';
+            session.qr = null;
+
+            // تحديث حالة الجهاز في قاعدة البيانات
+            await firebase.updateDeviceStatus(deviceId, 'authenticated');
+            
+            logger.info(`تم مصادقة الجهاز ${deviceId} بنجاح`);
+        } catch (error) {
+            logger.error('خطأ في معالجة حدث المصادقة:', error);
+        }
+    });
+
+    // عند فشل المصادقة
+    client.on('auth_failure', async (msg) => {
+        try {
+            // تحديث حالة الجلسة
+            session.status = 'error';
+            session.message = 'فشل في المصادقة: ' + msg;
+            session.qr = null;
+
+            // تحديث حالة الجهاز في قاعدة البيانات
+            await firebase.updateDeviceStatus(deviceId, 'error');
+            
+            logger.error(`فشل في مصادقة الجهاز ${deviceId}: ${msg}`);
+        } catch (error) {
+            logger.error('خطأ في معالجة فشل المصادقة:', error);
+        }
+    });
+
+    // عند قطع الاتصال
+    client.on('disconnected', async (reason) => {
+        try {
+            // تحديث حالة الجلسة
+            session.status = 'disconnected';
+            session.message = 'تم قطع الاتصال: ' + reason;
+            session.qr = null;
+
+            // تحديث حالة الجهاز في قاعدة البيانات
+            await firebase.updateDeviceStatus(deviceId, 'disconnected');
+            
+            // إزالة الجلسة
+            clientSessions.delete(deviceId);
+            
+            logger.info(`تم قطع اتصال الجهاز ${deviceId}: ${reason}`);
+        } catch (error) {
+            logger.error('خطأ في معالجة قطع الاتصال:', error);
+        }
+    });
+}
 
 module.exports = router; 
