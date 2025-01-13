@@ -1,109 +1,64 @@
 const admin = require('firebase-admin');
 
-/**
- * تسجيل رسالة معلومات
- */
-function info(message, data = {}, userId = null) {
-    return saveLog('INFO', message, data, userId);
+// تعريف أنواع السجلات
+const LogTypes = {
+    INFO: 'info',
+    ERROR: 'error',
+    WARNING: 'warning',
+    AUTH: 'auth',
+    DEVICE: 'device',
+    MESSAGE: 'message',
+    ADMIN: 'admin'
+};
+
+// دالة مساعدة لتنظيف البيانات
+function cleanData(data) {
+    if (!data) return {};
+    
+    // تحويل البيانات إلى كائن بسيط
+    const cleanedData = {};
+    Object.keys(data).forEach(key => {
+        const value = data[key];
+        if (value !== undefined && value !== null) {
+            if (typeof value === 'object') {
+                cleanedData[key] = JSON.stringify(value);
+            } else {
+                cleanedData[key] = value;
+            }
+        }
+    });
+    
+    return cleanedData;
 }
 
-/**
- * تسجيل رسالة خطأ
- */
-function error(message, data = {}, userId = null) {
-    return saveLog('ERROR', message, data, userId);
-}
-
-/**
- * تسجيل رسالة تحذير
- */
-function warning(message, data = {}, userId = null) {
-    return saveLog('WARNING', message, data, userId);
-}
-
-/**
- * تسجيل حدث مصادقة
- */
-function auth(message, data = {}, userId = null) {
-    return saveLog('AUTH', message, data, userId);
-}
-
-/**
- * تسجيل حدث جهاز
- */
-function device(message, data = {}, userId = null) {
-    return saveLog('DEVICE', message, data, userId);
-}
-
-/**
- * تسجيل حدث رسالة
- */
-function message(message, data = {}, userId = null) {
-    return saveLog('MESSAGE', message, data, userId);
-}
-
-/**
- * تسجيل حدث مشرف
- */
-function adminLog(message, data = {}, userId = null) {
-    return saveLog('ADMIN', message, data, userId);
-}
-
-/**
- * حفظ السجل في قاعدة البيانات
- */
+// حفظ سجل جديد
 async function saveLog(type, message, data = {}, userId = null) {
     try {
         const logData = {
             type,
             message,
-            data,
+            data: cleanData(data),
             userId,
-            timestamp: admin.firestore.FieldValue.serverTimestamp()
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            ip: global.requestIp || null,
+            userAgent: global.userAgent || null
         };
 
-        await admin.firestore()
-            .collection('logs')
-            .add(logData);
-
+        await admin.firestore().collection('logs').add(logData);
     } catch (error) {
         console.error('خطأ في حفظ السجل:', error);
     }
 }
 
-/**
- * تنظيف السجلات القديمة
- */
-async function cleanOldLogs(maxAge = 30) {
-    try {
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - maxAge);
+// دوال التسجيل المختلفة
+const logger = {
+    info: (message, data) => saveLog(LogTypes.INFO, message, data),
+    error: (message, data) => saveLog(LogTypes.ERROR, message, data),
+    warning: (message, data) => saveLog(LogTypes.WARNING, message, data),
+    auth: (message, data, userId) => saveLog(LogTypes.AUTH, message, data, userId),
+    device: (message, data, userId) => saveLog(LogTypes.DEVICE, message, data, userId),
+    message: (message, data, userId) => saveLog(LogTypes.MESSAGE, message, data, userId),
+    admin: (message, data, userId) => saveLog(LogTypes.ADMIN, message, data, userId)
+};
 
-        const snapshot = await admin.firestore()
-            .collection('logs')
-            .where('timestamp', '<', cutoffDate)
-            .get();
-
-        const batch = admin.firestore().batch();
-        snapshot.docs.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-
-        await batch.commit();
-        console.log(`تم حذف ${snapshot.size} سجل قديم`);
-
-    } catch (error) {
-        console.error('خطأ في تنظيف السجلات القديمة:', error);
-    }
-}
-
-module.exports = {
-    info,
-    error,
-    warning,
-    auth,
-    device,
-    message,
-    adminLog,
-    cleanOldLogs
-}; 
+module.exports = logger; 

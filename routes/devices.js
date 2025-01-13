@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const firebase = require('../utils/firebase');
 const logger = require('../utils/logger');
-const validation = require('../utils/validation');
+const { validateDeviceOwnership } = require('../middleware/auth');
+const { clientSessions } = require('../utils/whatsapp');
 
 // إضافة جهاز جديد
 router.post('/add', async (req, res) => {
@@ -10,37 +11,35 @@ router.post('/add', async (req, res) => {
         const { name, description } = req.body;
         const userId = req.session.userId;
 
-        // التحقق من اسم الجهاز
-        if (!name || name.trim().length < 3) {
-            return res.json({
+        if (!name || name.length < 3) {
+            return res.status(400).json({
                 success: false,
-                error: 'اسم الجهاز يجب أن يكون 3 أحرف على الأقل'
+                message: 'يجب أن يكون اسم الجهاز 3 أحرف على الأقل'
             });
         }
 
-        // إنشاء الجهاز
-        const device = await firebase.saveDevice({
-            name: name.trim(),
-            description: description?.trim() || '',
+        const deviceData = {
+            name,
+            description: description || '',
             userId,
             status: 'disconnected',
             createdAt: new Date(),
             updatedAt: new Date()
-        });
+        };
 
-        // تسجيل الحدث
-        logger.info(`تم إضافة جهاز جديد: ${name}`, { userId, deviceId: device.id });
+        const deviceId = await firebase.saveDevice(deviceData);
+        logger.info('تم إضافة جهاز جديد', { deviceId, name });
 
-        return res.json({
+        res.json({
             success: true,
-            device
+            deviceId,
+            message: 'تم إضافة الجهاز بنجاح'
         });
-
     } catch (error) {
-        logger.error('خطأ في إضافة جهاز جديد:', error);
-        return res.json({
+        logger.error('خطأ في إضافة الجهاز', { error: error.message });
+        res.status(500).json({
             success: false,
-            error: 'حدث خطأ في إضافة الجهاز'
+            message: 'حدث خطأ أثناء إضافة الجهاز'
         });
     }
 });
@@ -49,171 +48,52 @@ router.post('/add', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const userId = req.session.userId;
-        const { limit = 10, offset = 0 } = req.query;
+        const devices = await firebase.getUserDevices(userId);
 
-        // جلب الأجهزة
-        const devices = await firebase.getUserDevices(userId, {
-            limit: parseInt(limit),
-            offset: parseInt(offset)
-        });
+        // إضافة حالة الاتصال الحالية لكل جهاز
+        const devicesWithStatus = devices.map(device => ({
+            ...device,
+            isConnected: clientSessions.has(device.id)
+        }));
 
-        return res.json({
+        res.json({
             success: true,
-            devices
+            devices: devicesWithStatus
         });
-
     } catch (error) {
-        logger.error('خطأ في جلب قائمة الأجهزة:', error);
-        return res.json({
+        logger.error('خطأ في جلب الأجهزة', { error: error.message });
+        res.status(500).json({
             success: false,
-            error: 'حدث خطأ في جلب قائمة الأجهزة'
-        });
-    }
-});
-
-// تحديث معلومات الجهاز
-router.put('/:deviceId', async (req, res) => {
-    try {
-        const { deviceId } = req.params;
-        const { name, description } = req.body;
-        const userId = req.session.userId;
-
-        // التحقق من وجود الجهاز
-        const device = await firebase.getDevice(deviceId);
-        if (!device) {
-            return res.json({
-                success: false,
-                error: 'الجهاز غير موجود'
-            });
-        }
-
-        // التحقق من ملكية الجهاز
-        if (device.userId !== userId) {
-            return res.json({
-                success: false,
-                error: 'غير مصرح بالوصول لهذا الجهاز'
-            });
-        }
-
-        // التحقق من اسم الجهاز
-        if (name && name.trim().length < 3) {
-            return res.json({
-                success: false,
-                error: 'اسم الجهاز يجب أن يكون 3 أحرف على الأقل'
-            });
-        }
-
-        // تحديث معلومات الجهاز
-        const updates = {
-            updatedAt: new Date()
-        };
-
-        if (name) updates.name = name.trim();
-        if (description !== undefined) updates.description = description?.trim() || '';
-
-        await firebase.updateDevice(deviceId, updates);
-
-        // تسجيل الحدث
-        logger.info(`تم تحديث معلومات الجهاز: ${deviceId}`, { userId });
-
-        return res.json({
-            success: true,
-            message: 'تم تحديث معلومات الجهاز بنجاح'
-        });
-
-    } catch (error) {
-        logger.error('خطأ في تحديث معلومات الجهاز:', error);
-        return res.json({
-            success: false,
-            error: 'حدث خطأ في تحديث معلومات الجهاز'
+            message: 'حدث خطأ أثناء جلب الأجهزة'
         });
     }
 });
 
 // حذف جهاز
-router.delete('/:deviceId', async (req, res) => {
+router.delete('/:deviceId', validateDeviceOwnership, async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const userId = req.session.userId;
-
-        // التحقق من وجود الجهاز
-        const device = await firebase.getDevice(deviceId);
-        if (!device) {
-            return res.json({
-                success: false,
-                error: 'الجهاز غير موجود'
-            });
+        
+        // التحقق من وجود جلسة نشطة وإنهاؤها
+        if (clientSessions.has(deviceId)) {
+            const client = clientSessions.get(deviceId);
+            await client.destroy();
+            clientSessions.delete(deviceId);
         }
 
-        // التحقق من ملكية الجهاز
-        if (device.userId !== userId) {
-            return res.json({
-                success: false,
-                error: 'غير مصرح بالوصول لهذا الجهاز'
-            });
-        }
-
-        // حذف الجهاز
+        // حذف الجهاز من قاعدة البيانات
         await firebase.deleteDevice(deviceId);
+        logger.info('تم حذف الجهاز', { deviceId });
 
-        // تسجيل الحدث
-        logger.info(`تم حذف الجهاز: ${deviceId}`, { userId });
-
-        return res.json({
+        res.json({
             success: true,
             message: 'تم حذف الجهاز بنجاح'
         });
-
     } catch (error) {
-        logger.error('خطأ في حذف الجهاز:', error);
-        return res.json({
+        logger.error('خطأ في حذف الجهاز', { error: error.message });
+        res.status(500).json({
             success: false,
-            error: 'حدث خطأ في حذف الجهاز'
-        });
-    }
-});
-
-// الحصول على رسائل الجهاز
-router.get('/:deviceId/messages', async (req, res) => {
-    try {
-        const { deviceId } = req.params;
-        const userId = req.session.userId;
-        const { limit = 10, offset = 0 } = req.query;
-
-        // التحقق من وجود الجهاز
-        const device = await firebase.getDevice(deviceId);
-        if (!device) {
-            return res.json({
-                success: false,
-                error: 'الجهاز غير موجود'
-            });
-        }
-
-        // التحقق من ملكية الجهاز
-        if (device.userId !== userId) {
-            return res.json({
-                success: false,
-                error: 'غير مصرح بالوصول لهذا الجهاز'
-            });
-        }
-
-        // جلب الرسائل
-        const messages = await firebase.getUserMessages(userId, {
-            deviceId,
-            limit: parseInt(limit),
-            offset: parseInt(offset)
-        });
-
-        return res.json({
-            success: true,
-            messages
-        });
-
-    } catch (error) {
-        logger.error('خطأ في جلب رسائل الجهاز:', error);
-        return res.json({
-            success: false,
-            error: 'حدث خطأ في جلب رسائل الجهاز'
+            message: 'حدث خطأ أثناء حذف الجهاز'
         });
     }
 });
