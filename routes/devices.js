@@ -26,23 +26,15 @@ router.post('/add', async (req, res) => {
             });
         }
 
-        if (!req.session.user) {
-            logger.error('لا يوجد مستخدم في الجلسة');
-            return res.status(401).json({
-                success: false,
-                message: 'يجب تسجيل الدخول أولاً - لا يوجد مستخدم'
-            });
-        }
-
-        if (!req.session.user.id) {
+        if (!req.session.userId) {
             logger.error('لا يوجد معرف للمستخدم في الجلسة');
             return res.status(401).json({
                 success: false,
-                message: 'يجب تسجيل الدخول أولاً - لا يوجد معرف للمستخدم'
+                message: 'يجب تسجيل الدخول أولاً'
             });
         }
 
-        const userId = req.session.user.id;
+        const userId = req.session.userId;
         logger.info('بدء إضافة جهاز جديد', { userId, name });
 
         if (!name || name.length < 3) {
@@ -94,7 +86,7 @@ router.post('/add', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         // التحقق من وجود جلسة وهوية المستخدم
-        if (!req.session || !req.session.user || !req.session.user.id) {
+        if (!req.session || !req.session.userId) {
             logger.error('محاولة جلب الأجهزة بدون تسجيل دخول');
             return res.status(401).json({
                 success: false,
@@ -102,7 +94,7 @@ router.get('/', async (req, res) => {
             });
         }
 
-        const userId = req.session.user.id;
+        const userId = req.session.userId;
         
         // جلب الأجهزة الخاصة بالمستخدم فقط
         const devices = await firebase.getUserDevices(userId);
@@ -121,7 +113,7 @@ router.get('/', async (req, res) => {
         logger.error('خطأ في جلب الأجهزة', { error: error.message });
         res.status(500).json({
             success: false,
-            message: 'حدث خطأ أثناء جلب الأجهزة'
+            message: `حدث خطأ في تحميل الأجهزة: ${error.message}`
         });
     }
 });
@@ -132,7 +124,7 @@ router.delete('/:deviceId', validateDeviceOwnership, async (req, res) => {
         const { deviceId } = req.params;
         
         // التحقق من وجود جلسة وهوية المستخدم
-        if (!req.session || !req.session.user || !req.session.user.id) {
+        if (!req.session || !req.session.userId) {
             logger.error('محاولة حذف جهاز بدون تسجيل دخول');
             return res.status(401).json({
                 success: false,
@@ -140,7 +132,7 @@ router.delete('/:deviceId', validateDeviceOwnership, async (req, res) => {
             });
         }
 
-        const userId = req.session.user.id;
+        const userId = req.session.userId;
         
         // التحقق من وجود جلسة نشطة وإنهاؤها
         if (clientSessions.has(deviceId)) {
@@ -161,7 +153,7 @@ router.delete('/:deviceId', validateDeviceOwnership, async (req, res) => {
         logger.error('خطأ في حذف الجهاز', { error: error.message });
         res.status(500).json({
             success: false,
-            message: 'حدث خطأ أثناء حذف الجهاز'
+            message: `حدث خطأ أثناء حذف الجهاز: ${error.message}`
         });
     }
 });
