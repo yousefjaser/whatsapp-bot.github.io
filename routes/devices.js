@@ -18,17 +18,35 @@ router.post('/add', async (req, res) => {
         const { name, description } = req.body;
         
         // التحقق من وجود جلسة وهوية المستخدم
-        if (!req.session || !req.session.user || !req.session.user.id) {
-            logger.error('محاولة إضافة جهاز بدون تسجيل دخول');
+        if (!req.session) {
+            logger.error('لا توجد جلسة');
             return res.status(401).json({
                 success: false,
-                message: 'يجب تسجيل الدخول أولاً'
+                message: 'يجب تسجيل الدخول أولاً - لا توجد جلسة'
+            });
+        }
+
+        if (!req.session.user) {
+            logger.error('لا يوجد مستخدم في الجلسة');
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً - لا يوجد مستخدم'
+            });
+        }
+
+        if (!req.session.user.id) {
+            logger.error('لا يوجد معرف للمستخدم في الجلسة');
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً - لا يوجد معرف للمستخدم'
             });
         }
 
         const userId = req.session.user.id;
+        logger.info('بدء إضافة جهاز جديد', { userId, name });
 
         if (!name || name.length < 3) {
+            logger.warning('محاولة إضافة جهاز باسم غير صالح', { name });
             return res.status(400).json({
                 success: false,
                 message: 'يجب أن يكون اسم الجهاز 3 أحرف على الأقل'
@@ -37,6 +55,7 @@ router.post('/add', async (req, res) => {
 
         // إنشاء معرف فريد للجهاز
         const deviceId = generateDeviceId();
+        logger.info('تم إنشاء معرف للجهاز', { deviceId });
 
         const deviceData = {
             deviceId,
@@ -49,6 +68,7 @@ router.post('/add', async (req, res) => {
         };
 
         // حفظ الجهاز في Firestore
+        logger.info('محاولة حفظ الجهاز', deviceData);
         await firebase.saveDevice(deviceId, deviceData);
         logger.device('تم إضافة جهاز جديد', { deviceId, name }, userId);
 
@@ -58,10 +78,14 @@ router.post('/add', async (req, res) => {
             message: 'تم إضافة الجهاز بنجاح'
         });
     } catch (error) {
-        logger.error('خطأ في إضافة الجهاز', { error: error.message });
+        logger.error('خطأ في إضافة الجهاز', { 
+            error: error.message,
+            stack: error.stack,
+            name: error.name
+        });
         res.status(500).json({
             success: false,
-            message: 'حدث خطأ أثناء إضافة الجهاز'
+            message: `حدث خطأ أثناء إضافة الجهاز: ${error.message}`
         });
     }
 });
