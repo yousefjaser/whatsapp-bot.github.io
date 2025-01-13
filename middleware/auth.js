@@ -7,32 +7,43 @@ const logger = require('../utils/logger');
 async function validateSession(req, res, next) {
     try {
         // التحقق من وجود جلسة
-        if (!req.session || !req.session.userId) {
-            return handleAuthError(req, res, 'يرجى تسجيل الدخول أولاً');
+        if (!req.session) {
+            logger.error('لا توجد جلسة');
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
         }
 
-        // التحقق من وجود المستخدم
+        // التحقق من وجود معرف المستخدم
+        if (!req.session.userId) {
+            logger.error('لا يوجد معرف للمستخدم في الجلسة');
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
+        // التحقق من وجود المستخدم في قاعدة البيانات
         const user = await firebase.getUser(req.session.userId);
         if (!user) {
-            await destroySession(req);
-            return handleAuthError(req, res, 'الحساب غير موجود');
+            logger.error('المستخدم غير موجود في قاعدة البيانات', { userId: req.session.userId });
+            req.session.destroy();
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
         }
 
-        // إضافة معلومات المستخدم للطلب
+        // تخزين معلومات المستخدم في الطلب
         req.user = user;
-        
-        // تسجيل الوصول
-        logger.info('وصول مصرح به', {
-            userId: user.id,
-            path: req.path,
-            method: req.method
-        });
-
         next();
-
     } catch (error) {
-        logger.error('خطأ في التحقق من الجلسة:', error);
-        return handleAuthError(req, res, 'حدث خطأ في التحقق من الجلسة');
+        logger.error('خطأ في التحقق من الجلسة', { error: error.message });
+        return res.status(500).json({
+            success: false,
+            message: 'حدث خطأ في التحقق من الجلسة'
+        });
     }
 }
 
@@ -73,34 +84,29 @@ async function validateAdmin(req, res, next) {
 async function validateDeviceOwnership(req, res, next) {
     try {
         const { deviceId } = req.params;
-        
-        // التحقق من وجود الجهاز
-        const device = await firebase.getDevice(deviceId);
-        if (!device) {
-            return res.status(404).json({
+        const userId = req.session?.userId;
+
+        if (!deviceId || !userId) {
+            return res.status(401).json({
                 success: false,
-                error: 'الجهاز غير موجود'
+                message: 'غير مصرح بالوصول'
             });
         }
 
-        // التحقق من ملكية الجهاز
-        if (device.userId !== req.user.id) {
+        const device = await firebase.getDevice(deviceId);
+        if (!device || device.userId !== userId) {
             return res.status(403).json({
                 success: false,
-                error: 'غير مصرح بالوصول لهذا الجهاز'
+                message: 'غير مصرح بالوصول لهذا الجهاز'
             });
         }
 
-        // إضافة معلومات الجهاز للطلب
-        req.device = device;
-
         next();
-
     } catch (error) {
-        logger.error('خطأ في التحقق من ملكية الجهاز:', error);
+        logger.error('خطأ في التحقق من ملكية الجهاز', { error: error.message });
         return res.status(500).json({
             success: false,
-            error: 'حدث خطأ في التحقق من ملكية الجهاز'
+            message: 'حدث خطأ في التحقق من ملكية الجهاز'
         });
     }
 }
