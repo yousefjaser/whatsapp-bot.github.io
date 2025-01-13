@@ -1,14 +1,14 @@
 const session = require('express-session');
-const FirebaseStore = require('connect-firebase-session')(session);
+const FirebaseStore = require('connect-session-firebase')(session);
 const admin = require('firebase-admin');
 const logger = require('./logger');
 
 // إعدادات الجلسة
 const sessionConfig = {
     store: new FirebaseStore({
-        database: admin.firestore(),
-        collection: 'sessions',
-        ttl: 604800 // أسبوع واحد
+        database: admin.database(),
+        sessions: 'sessions',
+        reapInterval: 24 * 60 * 60 * 1000 // يوم واحد
     }),
     secret: process.env.SESSION_SECRET || 'whatsapp-bot-secret-key',
     name: 'sessionId',
@@ -27,6 +27,7 @@ const sessionConfig = {
 async function createSession(req, userId) {
     return new Promise((resolve) => {
         req.session.userId = userId;
+        req.session.createdAt = Date.now();
         req.session.save((err) => {
             if (err) {
                 logger.error('خطأ في إنشاء الجلسة:', err);
@@ -51,18 +52,19 @@ async function destroySession(req) {
 // تنظيف الجلسات القديمة
 async function cleanOldSessions(maxAge = 30 * 24 * 60 * 60 * 1000) { // 30 يوم
     try {
-        const sessionsRef = admin.firestore().collection('sessions');
+        const sessionsRef = admin.database().ref('sessions');
         const oldSessions = await sessionsRef
-            .where('lastAccess', '<=', Date.now() - maxAge)
-            .get();
+            .orderByChild('lastAccess')
+            .endAt(Date.now() - maxAge)
+            .once('value');
 
-        const batch = admin.firestore().batch();
-        oldSessions.forEach(doc => {
-            batch.delete(doc.ref);
+        const updates = {};
+        oldSessions.forEach(snapshot => {
+            updates[snapshot.key] = null;
         });
 
-        await batch.commit();
-        logger.info(`تم حذف ${oldSessions.size} جلسة قديمة`);
+        await sessionsRef.update(updates);
+        logger.info(`تم حذف الجلسات القديمة`);
 
     } catch (error) {
         logger.error('خطأ في تنظيف الجلسات القديمة:', error);
