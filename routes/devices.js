@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
         // إضافة حالة الاتصال الحالية لكل جهاز
         const devicesWithStatus = devices.map(device => ({
             ...device,
-            isConnected: clientSessions.has(device.id)
+            isConnected: clientSessions.has(device.deviceId)
         }));
 
         res.json({
