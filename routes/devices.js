@@ -4,6 +4,7 @@ const admin = require('firebase-admin');
 const firebase = require('../utils/firebase');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const { clientSessions } = require('../utils/whatsapp');
 
 // إنشاء معرف فريد للجهاز
 function generateDeviceId() {
@@ -22,7 +23,7 @@ router.post('/add', async (req, res) => {
         });
 
         const { name, description = '' } = req.body;
-        const userId = req.session?.userId; // الوصول المباشر إلى معرف المستخدم من الجلسة
+        const userId = req.session?.userId;
 
         // التحقق من وجود معرف المستخدم
         if (!userId) {
@@ -94,28 +95,56 @@ router.post('/add', async (req, res) => {
  */
 router.get('/', async (req, res) => {
     try {
+        // تسجيل بداية العملية
+        logger.info('بداية جلب الأجهزة', {
+            session: req.session,
+            headers: req.headers
+        });
+
         const userId = req.session?.userId;
         
         if (!userId) {
+            logger.error('لا يوجد معرف مستخدم في الجلسة عند جلب الأجهزة', {
+                session: req.session
+            });
             return res.status(401).json({
                 success: false,
                 message: 'يجب تسجيل الدخول أولاً'
             });
         }
 
+        // جلب الأجهزة من قاعدة البيانات
         const devices = await firebase.getUserDevices(userId);
+        logger.info('تم جلب الأجهزة بنجاح', { 
+            userId,
+            devicesCount: devices.length,
+            devices: devices.map(d => ({ deviceId: d.deviceId, name: d.name }))
+        });
+
+        // إضافة حالة الاتصال لكل جهاز
+        const devicesWithStatus = devices.map(device => ({
+            ...device,
+            isConnected: clientSessions.has(device.deviceId)
+        }));
+
         res.json({
             success: true,
-            devices: devices
+            devices: devicesWithStatus
         });
     } catch (error) {
         logger.error('خطأ في جلب الأجهزة', {
-            error: error.message,
-            userId: req.session?.userId
+            error: {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            },
+            userId: req.session?.userId,
+            session: req.session
         });
         res.status(500).json({
             success: false,
-            message: 'حدث خطأ أثناء جلب الأجهزة'
+            message: 'حدث خطأ أثناء جلب الأجهزة',
+            error: error.message
         });
     }
 });
