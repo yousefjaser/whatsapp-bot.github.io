@@ -1,14 +1,24 @@
 const session = require('express-session');
-const FirebaseStore = require('connect-session-firebase')(session);
-const admin = require('firebase-admin');
+const KnexSessionStore = require('connect-session-knex')(session);
+const Knex = require('knex');
 const logger = require('./logger');
+
+// تهيئة قاعدة البيانات
+const knex = Knex({
+    client: 'sqlite3',
+    connection: {
+        filename: './sessions.sqlite'
+    },
+    useNullAsDefault: true
+});
 
 // إعدادات الجلسة
 const sessionConfig = {
-    store: new FirebaseStore({
-        database: admin.database(),
-        sessions: 'sessions',
-        reapInterval: 24 * 60 * 60 * 1000 // يوم واحد
+    store: new KnexSessionStore({
+        knex,
+        tablename: 'sessions',
+        createtable: true,
+        clearInterval: 24 * 60 * 60 * 1000 // يوم واحد
     }),
     secret: process.env.SESSION_SECRET || 'whatsapp-bot-secret-key',
     name: 'sessionId',
@@ -52,20 +62,11 @@ async function destroySession(req) {
 // تنظيف الجلسات القديمة
 async function cleanOldSessions(maxAge = 30 * 24 * 60 * 60 * 1000) { // 30 يوم
     try {
-        const sessionsRef = admin.database().ref('sessions');
-        const oldSessions = await sessionsRef
-            .orderByChild('lastAccess')
-            .endAt(Date.now() - maxAge)
-            .once('value');
+        const deleted = await knex('sessions')
+            .where('lastAccessed', '<=', Date.now() - maxAge)
+            .del();
 
-        const updates = {};
-        oldSessions.forEach(snapshot => {
-            updates[snapshot.key] = null;
-        });
-
-        await sessionsRef.update(updates);
-        logger.info(`تم حذف الجلسات القديمة`);
-
+        logger.info(`تم حذف ${deleted} جلسة قديمة`);
     } catch (error) {
         logger.error('خطأ في تنظيف الجلسات القديمة:', error);
     }
