@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const admin = require('firebase-admin');
 const firebase = require('../utils/firebase');
 const logger = require('../utils/logger');
 const { validateDeviceOwnership } = require('../middleware/auth');
@@ -15,7 +16,17 @@ function generateDeviceId() {
 router.post('/add', async (req, res) => {
     try {
         const { name, description } = req.body;
-        const userId = req.session.userId;
+        
+        // التحقق من وجود جلسة وهوية المستخدم
+        if (!req.session || !req.session.user || !req.session.user.id) {
+            logger.error('محاولة إضافة جهاز بدون تسجيل دخول');
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
+        const userId = req.session.user.id;
 
         if (!name || name.length < 3) {
             return res.status(400).json({
@@ -28,13 +39,13 @@ router.post('/add', async (req, res) => {
         const deviceId = generateDeviceId();
 
         const deviceData = {
-            deviceId, // إضافة معرف الجهاز للبيانات
+            deviceId,
             name,
             description: description || '',
-            userId, // ربط الجهاز بمعرف المستخدم
+            userId,
             status: 'disconnected',
-            createdAt: new Date(),
-            updatedAt: new Date()
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
         // حفظ الجهاز في Firestore
@@ -58,7 +69,17 @@ router.post('/add', async (req, res) => {
 // الحصول على قائمة الأجهزة
 router.get('/', async (req, res) => {
     try {
-        const userId = req.session.userId;
+        // التحقق من وجود جلسة وهوية المستخدم
+        if (!req.session || !req.session.user || !req.session.user.id) {
+            logger.error('محاولة جلب الأجهزة بدون تسجيل دخول');
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
+        const userId = req.session.user.id;
+        
         // جلب الأجهزة الخاصة بالمستخدم فقط
         const devices = await firebase.getUserDevices(userId);
 
@@ -85,7 +106,17 @@ router.get('/', async (req, res) => {
 router.delete('/:deviceId', validateDeviceOwnership, async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const userId = req.session.userId;
+        
+        // التحقق من وجود جلسة وهوية المستخدم
+        if (!req.session || !req.session.user || !req.session.user.id) {
+            logger.error('محاولة حذف جهاز بدون تسجيل دخول');
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
+        const userId = req.session.user.id;
         
         // التحقق من وجود جلسة نشطة وإنهاؤها
         if (clientSessions.has(deviceId)) {
