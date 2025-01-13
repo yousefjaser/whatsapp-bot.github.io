@@ -6,11 +6,31 @@ let initialized = false;
 function initializeFirebase() {
     if (!initialized) {
         try {
-            admin.initializeApp();
+            // التحقق من وجود متغيرات البيئة المطلوبة
+            if (!process.env.FIREBASE_PROJECT_ID) {
+                throw new Error('FIREBASE_PROJECT_ID غير محدد في متغيرات البيئة');
+            }
+
+            // تهيئة Firebase Admin
+            admin.initializeApp({
+                credential: admin.credential.applicationDefault(),
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+            });
+
             initialized = true;
-            logger.info('تم تهيئة Firebase Admin بنجاح');
+            logger.info('تم تهيئة Firebase Admin بنجاح', { 
+                projectId: process.env.FIREBASE_PROJECT_ID 
+            });
         } catch (error) {
-            logger.error('خطأ في تهيئة Firebase Admin', { error });
+            logger.error('خطأ في تهيئة Firebase Admin', { 
+                error: {
+                    message: error.message,
+                    stack: error.stack,
+                    name: error.name
+                },
+                projectId: process.env.FIREBASE_PROJECT_ID
+            });
             throw error;
         }
     }
