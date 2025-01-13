@@ -4,6 +4,12 @@ const firebase = require('../utils/firebase');
 const logger = require('../utils/logger');
 const { validateDeviceOwnership } = require('../middleware/auth');
 const { clientSessions } = require('../utils/whatsapp');
+const crypto = require('crypto');
+
+// دالة لإنشاء معرف فريد من 18 حرف
+function generateDeviceId() {
+    return crypto.randomBytes(9).toString('hex'); // 9 bytes = 18 characters in hex
+}
 
 // إضافة جهاز جديد
 router.post('/add', async (req, res) => {
@@ -18,17 +24,22 @@ router.post('/add', async (req, res) => {
             });
         }
 
+        // إنشاء معرف فريد للجهاز
+        const deviceId = generateDeviceId();
+
         const deviceData = {
+            deviceId, // إضافة معرف الجهاز للبيانات
             name,
             description: description || '',
-            userId,
+            userId, // ربط الجهاز بمعرف المستخدم
             status: 'disconnected',
             createdAt: new Date(),
             updatedAt: new Date()
         };
 
-        const deviceId = await firebase.saveDevice(deviceData);
-        logger.info('تم إضافة جهاز جديد', { deviceId, name });
+        // حفظ الجهاز في Firestore
+        await firebase.saveDevice(deviceId, deviceData);
+        logger.device('تم إضافة جهاز جديد', { deviceId, name }, userId);
 
         res.json({
             success: true,
@@ -48,6 +59,7 @@ router.post('/add', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const userId = req.session.userId;
+        // جلب الأجهزة الخاصة بالمستخدم فقط
         const devices = await firebase.getUserDevices(userId);
 
         // إضافة حالة الاتصال الحالية لكل جهاز
@@ -73,6 +85,7 @@ router.get('/', async (req, res) => {
 router.delete('/:deviceId', validateDeviceOwnership, async (req, res) => {
     try {
         const { deviceId } = req.params;
+        const userId = req.session.userId;
         
         // التحقق من وجود جلسة نشطة وإنهاؤها
         if (clientSessions.has(deviceId)) {
@@ -83,7 +96,7 @@ router.delete('/:deviceId', validateDeviceOwnership, async (req, res) => {
 
         // حذف الجهاز من قاعدة البيانات
         await firebase.deleteDevice(deviceId);
-        logger.info('تم حذف الجهاز', { deviceId });
+        logger.device('تم حذف الجهاز', { deviceId }, userId);
 
         res.json({
             success: true,

@@ -50,28 +50,36 @@ async function updateUser(userId, data) {
     }
 }
 
-// حفظ الجهاز
-async function saveDevice(deviceData) {
+// حفظ جهاز جديد
+async function saveDevice(deviceId, deviceData) {
     try {
-        const deviceRef = await admin.firestore().collection('devices').add({
-            ...deviceData,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        return deviceRef.id;
+        await admin.firestore()
+            .collection('devices')
+            .doc(deviceId)
+            .set(deviceData);
+        
+        return deviceId;
     } catch (error) {
-        logger.error('خطأ في حفظ الجهاز:', error);
+        logger.error('خطأ في حفظ الجهاز', { error: error.message, deviceId });
         throw error;
     }
 }
 
-// الحصول على معلومات الجهاز
+// جلب جهاز واحد
 async function getDevice(deviceId) {
     try {
-        const deviceDoc = await admin.firestore().collection('devices').doc(deviceId).get();
-        return deviceDoc.exists ? { id: deviceDoc.id, ...deviceDoc.data() } : null;
+        const doc = await admin.firestore()
+            .collection('devices')
+            .doc(deviceId)
+            .get();
+
+        if (!doc.exists) {
+            return null;
+        }
+
+        return { deviceId: doc.id, ...doc.data() };
     } catch (error) {
-        logger.error('خطأ في جلب معلومات الجهاز:', error);
+        logger.error('خطأ في جلب الجهاز', { error: error.message, deviceId });
         throw error;
     }
 }
@@ -89,21 +97,36 @@ async function updateDeviceStatus(deviceId, status) {
     }
 }
 
-// الحصول على أجهزة المستخدم
-async function getUserDevices(userId, options = {}) {
+// جلب أجهزة المستخدم
+async function getUserDevices(userId) {
     try {
-        let query = admin.firestore().collection('devices')
+        const snapshot = await admin.firestore()
+            .collection('devices')
             .where('userId', '==', userId)
-            .orderBy('createdAt', 'desc');
+            .orderBy('createdAt', 'desc')
+            .get();
 
-        if (options.limit) {
-            query = query.limit(options.limit);
-        }
-
-        const snapshot = await query.get();
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return snapshot.docs.map(doc => ({
+            deviceId: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate(),
+            updatedAt: doc.data().updatedAt?.toDate()
+        }));
     } catch (error) {
-        logger.error('خطأ في جلب أجهزة المستخدم:', error);
+        logger.error('خطأ في جلب أجهزة المستخدم', { error: error.message, userId });
+        throw error;
+    }
+}
+
+// حذف جهاز
+async function deleteDevice(deviceId) {
+    try {
+        await admin.firestore()
+            .collection('devices')
+            .doc(deviceId)
+            .delete();
+    } catch (error) {
+        logger.error('خطأ في حذف الجهاز', { error: error.message, deviceId });
         throw error;
     }
 }
@@ -154,5 +177,6 @@ module.exports = {
     updateDeviceStatus,
     getUserDevices,
     saveMessage,
-    getUserMessages
+    getUserMessages,
+    deleteDevice
 }; 
